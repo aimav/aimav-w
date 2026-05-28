@@ -1,0 +1,131 @@
+<div class="app-layout">
+    <!-- Left Column (25% Width, 100% Height) -->
+    <div class="column left-column">
+        <div class="banner side-banner">
+            <span class="banner-title">Authentication</span>
+        </div>
+
+        <div class="input-group">
+            <label class="input-label" for="input-username">Your Username</label>
+            <input class="input-field" id="input-username" type="text" placeholder="Enter your username..."
+                [(ngModel)]="username" />
+        </div>
+
+        <div class="input-group">
+            <label class="input-label" for="input-shape">What shape do you think of?</label>
+            <input class="input-field" id="input-shape" type="text" placeholder="Enter a shape..."
+                [(ngModel)]="shape" />
+        </div>
+
+        <div class="input-group">
+            <label class="input-label" for="input-sound">What sound do you think of?</label>
+            <input class="input-field" id="input-sound" type="text" placeholder="Enter a sound..."
+                [(ngModel)]="sound" />
+        </div>
+
+        <button class="action-btn" id="btn-get-vault-password" (click)="getVaultPassword()">Get Vault Password</button>
+
+        <div class="input-group">
+            <label class="input-label" for="input-vault-password">Vault Password</label>
+            <input class="input-field" id="input-vault-password" placeholder="Vault password" [value]="vaultPassword()"
+                readonly />
+        </div>
+        <div class="separator-div" style="border-top:1px solid #777; margin-top:1rem;">&nbsp;</div>
+
+        <div class="input-group">
+            <label class="input-label" for="input-domain">Domain</label>
+            <input class="input-field" id="input-domain" type="text" placeholder="Enter a domain..."
+                [(ngModel)]="domain" />
+        </div>
+
+        <button class="action-btn" id="btn-get-service-password" (click)="getServicePassword()">Get Service
+            Password</button>
+
+        <div class="input-group">
+            <label class="input-label" for="input-service-password">Service Password</label>
+            <input class="input-field" id="input-service-password" placeholder="Service password"
+                [value]="servicePassword()" readonly />
+        </div>
+    </div>
+
+    <!-- Middle Column (50% Width, 100% Height) -->
+    <div class="column main-column">
+        <div class="banner main-banner">
+            <img src="img/logo.png" alt="Aimav Logo" class="banner-logo" />
+            <h1 class="banner-text">Aimav — AI and everything mapped into one</h1>
+        </div>
+
+        <!-- Chat log: shown only when chat panel is active -->
+        @if (showChat()) {
+        <div class="chat-log" id="chat-log">
+            <!-- Chat messages appear here -->
+        </div>
+        }
+
+        <!-- Chat input bar pinned to bottom of centre column -->
+        <div class="chat-input-bar">
+            <textarea class="chat-textarea" id="chat-input" rows="2" placeholder="Type a message..."
+                [(ngModel)]="chatInput"></textarea>
+            <div class="chat-actions">
+                <button class="chat-btn" id="btn-chat" (click)="toggleChat()">Chat</button>
+                <button class="chat-btn" id="btn-apps" (click)="toggleApps()">Apps</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column (25% Width, 100% Height) -->
+    <div class="column right-column">
+        <div class="banner side-banner">
+            <span class="banner-title">Details</span>
+        </div>
+
+        <div class="input-group">
+            <label class="input-label">Usage Guide</label>
+            <div style="padding-left:16px; height:40px; margin-top:1px;">Aimav needs an AI key to run.</div>
+        </div>
+
+        <div class="input-group">
+            <label class="input-label">Obtain AI Key</label>
+            <div style="height:40px; margin-top:1px;">
+                <a target="_blank" style="padding-left:16px;" href="https://openrouter.ai/workspaces/default/keys">From
+                    OpenRouter</a>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label class="input-label" for="input-ai-key">Your AI Key</label>
+            <input class="input-field" id="input-ai-key" type="text" placeholder="Enter AI key..." />
+        </div>
+
+        <button class="action-btn" id="btn-set-ai-key">Set AI Key</button>
+        <div>&nbsp;</div>
+
+        <div class="input-group">
+            <label class="input-label">More Guides</label>
+            <div style="height:40px; margin-top:1px;">
+                <a target="_blank" style="padding-left:16px;" href="javascript:">User's Guide</a>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label class="input-label">Support</label>
+            <div style="height:40px; margin-top:1px;">
+                <a target="_blank" style="padding-left:16px;" href="javascript:">Feedback</a>
+            </div>
+        </div>
+
+        <div style="border-radius: 15px; opacity:.25; height:150px;
+        background:url(img/ad-placeholder.png); background-size:cover;
+        background-position: center center;">&nbsp;</div>
+    </div>
+</div>
+
+<!-- Apps overlay with backdrop -->
+@if (showApps()) {
+<div class="apps-backdrop" id="apps-backdrop" (click)="toggleApps()"></div>
+<div class="apps-overlay" id="apps-overlay">
+    <!-- Apps content goes here -->
+</div>
+}
+
+<router-outlet />
