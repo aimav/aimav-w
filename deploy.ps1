@@ -2,6 +2,7 @@ rm ../aimav.github.io/*.js
 rm ../aimav.github.io/*.css
 
 cp ./public/img/*.* ../aimav.github.io/img
+cp ./public/libs/*.* ../aimav.github.io/libs
 
 cp ./dist/aimav-w/browser/*.* ../aimav.github.io
 

@@ -53,8 +53,14 @@
         <div class="banner main-banner" style="background:#F9CFF3;">
             <img src="img/logo.png" alt="Aimav Logo" class="banner-logo" onclick="top.location='/';"
                 style="cursor:pointer;" />
-            <h1 class="banner-text" onclick="top.location='/';" style="cursor:pointer;">Aimav — AI and everything mapped
-                into one</h1>
+
+            <div>
+                <h1 class="banner-text" onclick="top.location='/';" style="cursor:pointer;">Aimav — AI and everything
+                    mapped
+                    into one</h1>
+                <div style="font-family: sans-serif; font-size:10px;">The AAA Solution — Auth, AI, Apps — for life,
+                    work, in a single unity, the AI-powered web OS</div>
+            </div>
         </div>
 
         <!-- Chat log: shown only when chat panel is active -->
@@ -127,7 +133,16 @@
 @if (showApps()) {
 <div class="apps-backdrop" id="apps-backdrop" (click)="toggleApps()"></div>
 <div class="apps-overlay" id="apps-overlay">
-    <!-- Apps content goes here -->
+    <!-- Apps list generated from src/data/apps.js -->
+    <div class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+        <div *ngFor="let app of apps" class="app-tile" style="width: 120px; text-align: center;">
+            <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
+                <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
+                    alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
+                <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
+            </a>
+        </div>
+    </div>
 </div>
 }
 

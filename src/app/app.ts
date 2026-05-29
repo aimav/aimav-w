@@ -1,4 +1,7 @@
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
+import { CommonModule } from '@angular/common';
+// @ts-ignore: Importing JS module without type definitions
+import appsData from '../data/apps.js';
 import { RouterOutlet } from '@angular/router';
 
 // Import Showdown for markdown rendering
@@ -12,7 +15,8 @@ const CURRENT_MODEL = "openrouter/free";
 
 @Component({
     selector: 'app-root',
-    imports: [RouterOutlet, FormsModule],
+    standalone: true,
+    imports: [RouterOutlet, FormsModule, CommonModule],
     templateUrl: './app.html',
     styleUrl: './app.css',
 })
@@ -52,6 +56,9 @@ export class App implements OnDestroy {
 
     /** Whether the Apps overlay is visible. */
     protected showApps = signal(false);
+
+    // List of apps for the overlay
+    public apps = appsData;
 
     /** Handle for the auto-clear timer so it can be cancelled or reset. */
     private clearTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -177,8 +184,9 @@ export class App implements OnDestroy {
         // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
         if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
             const entry = document.createElement('div');
-            entry.innerHTML = `<b>You</b>: <b>${message}</b>`;
+            entry.innerHTML = `<b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
             this.chatLogDiv.nativeElement.appendChild(entry);
+            this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
         }
         // Clear the input field
         this.chatInput.set("");
@@ -189,6 +197,11 @@ export class App implements OnDestroy {
         // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
         const converter = new (window as any).showdown.Converter({
             tables: true
+        });
+        var manuallyScrolled = false;
+
+        this.chatLogDiv.nativeElement.addEventListener('wheel', (ev: Event) => {
+            manuallyScrolled = true;
         });
 
         if (apiKey) {
@@ -229,7 +242,7 @@ export class App implements OnDestroy {
                         const chunk = decoder.decode(value, { stream: true });
                         if (chunk.trim().length == 0) continue;
                         if (!chunk.startsWith("data:")) continue;
-                        console.log('Stream chunk:', chunk);
+                        // console.log('Stream chunk:', chunk);
 
                         let parts = chunk.split("\n");
 
@@ -237,10 +250,16 @@ export class App implements OnDestroy {
                             p = p.slice(5).trim();
                             if (p == "[DONE]") break;
                             if (p.trim().length == 0) continue;
-                            let obj = JSON.parse(p);
+                            let obj;
 
-                            streamedText += obj.choices[0].delta.content;
-
+                            try {
+                                obj = JSON.parse(p);
+                                streamedText += obj.choices[0].delta.content;
+                            }
+                            catch {
+                                // streamedText += `\n[A-CHUNK]\n`;
+                                streamedText += `...\x20`;
+                            }
                             if (modelName == null && obj.model != null)
                                 modelName = obj.model;
                         }
@@ -250,6 +269,14 @@ export class App implements OnDestroy {
                             // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
                             const html = converter.makeHtml(streamedText);
                             streamingDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
+
+                            if (!manuallyScrolled)
+                                this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+
+                            if (modelName == null) {
+                                log("Null response from openrouter");
+                                this.chatInput.set(message.trim());
+                            }
                         } catch (e) {
                             console.error('Error converting markdown to HTML:', e);
                         }
@@ -261,10 +288,17 @@ export class App implements OnDestroy {
                 try {
                     // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
                     const aiMessage = streamedText;
-                    const html = converter.makeHtml(aiMessage);
+                    var html = converter.makeHtml(aiMessage);
+                    html += `<div><small>(Answered by ${modelName})</small></div>`;
                     const aiDiv = document.createElement('div');
                     aiDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
                     this.chatLogDiv.nativeElement.appendChild(aiDiv);
+                    this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+
+                    if (modelName == null) {
+                        log("Null response from openrouter");
+                        this.chatInput.set(message.trim());
+                    }
                 } catch (e) {
                     console.error('Error converting markdown to HTML:', e);
                 }
@@ -280,6 +314,11 @@ export class App implements OnDestroy {
                 }
             }
         }
+    }
+
+    public ngOnInit(): void {
+        log("Apps data:", this.apps);
+        this.apps = this.apps.sort((a: any, b: any) => a.name.localeCompare(b.name));
     }
 
     /**

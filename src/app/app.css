@@ -1,3 +1,20 @@
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #F9F8FB !important;
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: silver !important;
+}
+
 :host {
     display: block;
     width: 100vw;
@@ -150,6 +167,10 @@
     border-color: oklch(63.32% 0.24 31.68);
     box-shadow: 0 0 0 3px oklch(63.32% 0.24 31.68 / 0.15);
     background: rgba(255, 255, 255, 0.9);
+}
+
+.user-chat-message {
+    background-color: yellow;
 }
 
 /* Action Button */
