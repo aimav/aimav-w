@@ -367,6 +367,8 @@ export class App implements OnDestroy {
         // Clear the input field
         this.chatInput.set("");
 
+        this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
+
         // Send the message to OpenRouter if an API key is stored
         const apiKey = localStorage.getItem('aiKey');
         var modelName = null;
