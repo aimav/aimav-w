@@ -93,12 +93,10 @@
     letter-spacing: -0.04em;
     margin: 0;
     line-height: 1;
-    background: linear-gradient(
-        90deg,
-        oklch(63.32% 0.24 31.68) 0%,
-        oklch(69.02% 0.277 332.77) 50%,
-        oklch(53.18% 0.28 296.97) 100%
-    );
+    background: linear-gradient(90deg,
+            oklch(63.32% 0.24 31.68) 0%,
+            oklch(69.02% 0.277 332.77) 50%,
+            oklch(53.18% 0.28 296.97) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
@@ -162,12 +160,10 @@
     padding: 0.65rem 1rem;
     border-radius: 10px;
     border: 1px solid rgba(0, 0, 0, 0.08);
-    background: linear-gradient(
-        135deg,
-        oklch(63.32% 0.24 31.68 / 0.12) 0%,
-        oklch(69.02% 0.277 332.77 / 0.12) 100%
-    );
-    color: oklch(35% 0.18 31.68);
+    background: linear-gradient(135deg,
+            #eee 0%,
+            white 100%);
+    color: black;
     font-size: 0.88rem;
     font-weight: 700;
     letter-spacing: 0.04em;
@@ -177,11 +173,9 @@
 }
 
 .action-btn:hover {
-    background: linear-gradient(
-        135deg,
-        oklch(63.32% 0.24 31.68 / 0.22) 0%,
-        oklch(69.02% 0.277 332.77 / 0.22) 100%
-    );
+    background: linear-gradient(135deg,
+            oklch(63.32% 0.24 31.68 / 0.22) 0%,
+            oklch(69.02% 0.277 332.77 / 0.22) 100%);
     box-shadow: 0 4px 14px oklch(63.32% 0.24 31.68 / 0.2);
     transform: translateY(-1px);
 }
@@ -256,11 +250,9 @@
     padding: 0.6rem 1rem;
     border-radius: 10px;
     border: 1px solid rgba(0, 0, 0, 0.08);
-    background: linear-gradient(
-        135deg,
-        oklch(53.18% 0.28 296.97 / 0.12) 0%,
-        oklch(63.32% 0.24 31.68 / 0.12) 100%
-    );
+    background: linear-gradient(135deg,
+            oklch(53.18% 0.28 296.97 / 0.12) 0%,
+            oklch(63.32% 0.24 31.68 / 0.12) 100%);
     color: oklch(30% 0.15 296.97);
     font-size: 0.88rem;
     font-weight: 700;
@@ -271,11 +263,9 @@
 }
 
 .chat-btn:hover {
-    background: linear-gradient(
-        135deg,
-        oklch(53.18% 0.28 296.97 / 0.22) 0%,
-        oklch(63.32% 0.24 31.68 / 0.22) 100%
-    );
+    background: linear-gradient(135deg,
+            oklch(53.18% 0.28 296.97 / 0.22) 0%,
+            oklch(63.32% 0.24 31.68 / 0.22) 100%);
     box-shadow: 0 4px 14px oklch(53.18% 0.28 296.97 / 0.18);
     transform: translateY(-1px);
 }
@@ -314,11 +304,23 @@
 }
 
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to   { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes slideUp {
-    from { opacity: 0; transform: translate(-50%, -46%); }
-    to   { opacity: 1; transform: translate(-50%, -50%); }
+    from {
+        opacity: 0;
+        transform: translate(-50%, -46%);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
 }

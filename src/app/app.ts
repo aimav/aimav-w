@@ -1,7 +1,14 @@
-import { Component, OnDestroy, signal } from '@angular/core';
+import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+
+// Import Showdown for markdown rendering
+// Showdown import removed as not used
 import { FormsModule } from '@angular/forms';
 import { sha1 } from '../modules/common.js';
+
+var log = console.log;
+// Streaming guide: https://openrouter.ai/openrouter/free
+const CURRENT_MODEL = "openrouter/free";
 
 @Component({
     selector: 'app-root',
@@ -16,6 +23,7 @@ import { sha1 } from '../modules/common.js';
  * input fields 1 minute after the last password generation action.
  */
 export class App implements OnDestroy {
+    public CUR_MODEL = CURRENT_MODEL;
     protected readonly title = signal('aimav-w');
 
     /** Current value of the username input box. */
@@ -88,6 +96,30 @@ export class App implements OnDestroy {
     }
 
     /**
+     * Handles the 'Set AI Key' button click.
+     * Retrieves the value from the input element with id "input-ai-key"
+     * and stores it in the browser's localStorage under the key "aiKey".
+     * Uses Angular's ViewChild to access the element in an Angular‑friendly way.
+     */
+    public setAIKey(event: Event): void {
+        // Prevent default form/button behaviour just in case
+        event?.preventDefault?.();
+        // Access the input element via the DOM. Since the element is not a component
+        // property, we query it directly but still within Angular's zone.
+        const input = (event.target as HTMLElement).ownerDocument.getElementById('input-ai-key') as HTMLInputElement | null;
+        if (input) {
+            const key = input.value.trim();
+            if (key) {
+                localStorage.setItem('aiKey', key);
+            } else {
+                // If empty, remove the stored key
+                if (confirm('Are you sure you want to remove the AI key?'))
+                    localStorage.removeItem('aiKey');
+            }
+        }
+    }
+
+    /**
      * Handles the 'Get Vault Password' button click.
      * Normalises username, shape, and sound inputs, joins them with single spaces
      * in the order: username shape sound, computes the SHA-1 hash, writes the
@@ -135,6 +167,119 @@ export class App implements OnDestroy {
      */
     protected toggleApps(): void {
         this.showApps.update(v => !v);
+    }
+
+    @ViewChild('chatLog', { static: false }) chatLogDiv!: ElementRef<HTMLDivElement>;
+
+    public async sendMessage(ev: Event) {
+        ev.preventDefault();
+        const message = this.chatInput();
+        // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
+        if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
+            const entry = document.createElement('div');
+            entry.innerHTML = `<b>You</b>: <b>${message}</b>`;
+            this.chatLogDiv.nativeElement.appendChild(entry);
+        }
+        // Clear the input field
+        this.chatInput.set("");
+
+        // Send the message to OpenRouter if an API key is stored
+        const apiKey = localStorage.getItem('aiKey');
+        var modelName = null;
+        // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+        const converter = new (window as any).showdown.Converter({
+            tables: true
+        });
+
+        if (apiKey) {
+            // Show a temporary "Asking model..." message in the chat log
+            const askingDiv = document.createElement('div');
+            askingDiv.textContent = 'Asking model...';
+            this.chatLogDiv.nativeElement.appendChild(askingDiv);
+            try {
+                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Accept': 'text/event-stream',
+                    },
+                    body: JSON.stringify({
+                        model: CURRENT_MODEL,
+                        messages: [{ role: 'user', content: message }],
+                        stream: true
+                    }),
+                });
+
+                // Stream response chunks to console before processing
+                const reader = response.body?.getReader();
+                const decoder = new TextDecoder('utf-8');
+                let streamedText = '';
+                // Create a temporary streaming block in the chat log
+                const streamingDiv = document.createElement('div');
+                streamingDiv.className = 'streaming';
+                this.chatLogDiv.nativeElement.appendChild(streamingDiv);
+
+                if (reader) {
+                    while (true) {
+                        const v = await reader.read();
+                        const { done, value } = v;
+                        if (done) break;
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        if (chunk.trim().length == 0) continue;
+                        if (!chunk.startsWith("data:")) continue;
+                        console.log('Stream chunk:', chunk);
+
+                        let parts = chunk.split("\n");
+
+                        for (let p of parts) {
+                            p = p.slice(5).trim();
+                            if (p == "[DONE]") break;
+                            if (p.trim().length == 0) continue;
+                            let obj = JSON.parse(p);
+
+                            streamedText += obj.choices[0].delta.content;
+
+                            if (modelName == null && obj.model != null)
+                                modelName = obj.model;
+                        }
+
+                        // Convert streamed markdown to HTML and display in the streaming block
+                        try {
+                            // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+                            const html = converter.makeHtml(streamedText);
+                            streamingDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
+                        } catch (e) {
+                            console.error('Error converting markdown to HTML:', e);
+                        }
+                    }
+                    streamingDiv.remove();
+                }
+
+                // Convert AI response markdown to HTML using Showdown
+                try {
+                    // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
+                    const aiMessage = streamedText;
+                    const html = converter.makeHtml(aiMessage);
+                    const aiDiv = document.createElement('div');
+                    aiDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
+                    this.chatLogDiv.nativeElement.appendChild(aiDiv);
+                } catch (e) {
+                    console.error('Error converting markdown to HTML:', e);
+                }
+                // Remove the "Asking model..." placeholder after receiving response
+                if (askingDiv.parentNode) {
+                    askingDiv.parentNode.removeChild(askingDiv);
+                }
+            } catch (err) {
+                console.error('Error calling OpenRouter:', err);
+                // Ensure placeholder is removed even on error
+                if (askingDiv.parentNode) {
+                    askingDiv.parentNode.removeChild(askingDiv);
+                }
+            }
+        }
     }
 
     /**

@@ -11,5 +11,6 @@ git commit -a -m Deploy
 git push
 
 cd ../aimav-w
+echo "Now merge dev->main on GitHub"
 
 # EOF

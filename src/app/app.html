@@ -28,13 +28,13 @@
         <div class="input-group">
             <label class="input-label" for="input-vault-password">Vault Password</label>
             <input class="input-field" id="input-vault-password" placeholder="Vault password" [value]="vaultPassword()"
-                readonly />
+                readonly onclick="this.select();" />
         </div>
         <div class="separator-div" style="border-top:1px solid #777; margin-top:1rem;">&nbsp;</div>
 
         <div class="input-group">
             <label class="input-label" for="input-domain">Domain</label>
-            <input class="input-field" id="input-domain" type="text" placeholder="Enter a domain..."
+            <input class="input-field" id="input-domain" type="text" placeholder="Domain/Username"
                 [(ngModel)]="domain" />
         </div>
 
@@ -44,20 +44,22 @@
         <div class="input-group">
             <label class="input-label" for="input-service-password">Service Password</label>
             <input class="input-field" id="input-service-password" placeholder="Service password"
-                [value]="servicePassword()" readonly />
+                [value]="servicePassword()" readonly onclick="this.select();" />
         </div>
     </div>
 
     <!-- Middle Column (50% Width, 100% Height) -->
     <div class="column main-column">
-        <div class="banner main-banner">
-            <img src="img/logo.png" alt="Aimav Logo" class="banner-logo" />
-            <h1 class="banner-text">Aimav — AI and everything mapped into one</h1>
+        <div class="banner main-banner" style="background:#F9CFF3;">
+            <img src="img/logo.png" alt="Aimav Logo" class="banner-logo" onclick="top.location='/';"
+                style="cursor:pointer;" />
+            <h1 class="banner-text" onclick="top.location='/';" style="cursor:pointer;">Aimav — AI and everything mapped
+                into one</h1>
         </div>
 
         <!-- Chat log: shown only when chat panel is active -->
         <!-- @if (showChat()) { -->
-        <div class="chat-log" id="chat-log">
+        <div class="chat-log" id="chat-log" #chatLog>
             <!-- Chat messages appear here -->
         </div>
         <!-- } -->
@@ -65,7 +67,7 @@
         <!-- Chat input bar pinned to bottom of centre column -->
         <div class="chat-input-bar">
             <textarea class="chat-textarea" id="chat-input" rows="2" placeholder="Type a message..."
-                [(ngModel)]="chatInput"></textarea>
+                [(ngModel)]="chatInput" (keyup.enter)="sendMessage($event)"></textarea>
             <div class="chat-actions">
                 <button class="chat-btn" id="btn-chat" (click)="toggleChat()">Chat</button>
                 <button class="chat-btn" id="btn-apps" (click)="toggleApps()">Apps</button>
@@ -94,16 +96,17 @@
 
         <div class="input-group">
             <label class="input-label" for="input-ai-key">Your AI Key</label>
-            <input class="input-field" id="input-ai-key" type="text" placeholder="Enter AI key..." />
+            <input class="input-field" id="input-ai-key" type="text" placeholder="AI key (empty to remove)..."
+                onclick="this.value='';" />
         </div>
 
-        <button class="action-btn" id="btn-set-ai-key">Set AI Key</button>
+        <button class="action-btn" id="btn-set-ai-key" (click)="setAIKey($event)">Set AI Key</button>
         <div>&nbsp;</div>
 
         <div class="input-group">
-            <label class="input-label">More Guides</label>
+            <label class="input-label">Current Model</label>
             <div style="height:40px; margin-top:1px;">
-                <a target="_blank" style="padding-left:16px;" href="javascript:">User's Guide</a>
+                <a target="_blank" style="padding-left:16px;" href="javascript:">{{CUR_MODEL}}</a>
             </div>
         </div>
 
@@ -116,7 +119,7 @@
 
         <div style="border-radius: 15px; opacity:.25; height:150px;
         background:url(img/ad-placeholder.png); background-size:cover;
-        background-position: center center;">&nbsp;</div>
+        background-position: center center; border-bottom:2px solid black;">&nbsp;</div>
     </div>
 </div>
 
