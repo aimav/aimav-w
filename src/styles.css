@@ -8,3 +8,30 @@ body {
     overflow: hidden;
     background-color: oklch(95% 0.01 300);
 }
+
+.apps-list,
+.extensions-list {
+    background-color: white;
+    border-radius: 1rem;
+    justify-content: center;
+}
+
+/* Material menu content background – moved to global stylesheet so it applies to overlay panels */
+.mat-mdc-menu-content {
+    background-color: white;
+    border-radius: 10px;
+}
+
+.mat-mdc-menu-content>button:hover {
+    background-color: #fee !important;
+}
+
+.app-filter {
+    width: 50vw;
+    margin-left: calc(25vw - 30px);
+    margin-top: 0;
+    height: 30px;
+    border: 0;
+    border-radius: 1rem;
+    padding-left: 1rem;
+}

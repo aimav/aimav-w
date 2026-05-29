@@ -26,7 +26,13 @@
         <button class="action-btn" id="btn-get-vault-password" (click)="getVaultPassword()">Get Vault Password</button>
 
         <div class="input-group">
-            <label class="input-label" for="input-vault-password">Vault Password</label>
+            <label class="input-label" for="input-vault-password">
+                <div style="display:flex; flex-direction: row; justify-content: space-between;">
+                    <span>Vault Password</span>
+                    <span style="text-decoration: underline; cursor: pointer;"
+                        (click)="clearVaultPassword()">Clear</span>
+                </div>
+            </label>
             <input class="input-field" id="input-vault-password" placeholder="Vault password" [value]="vaultPassword()"
                 readonly onclick="this.select();" />
         </div>
@@ -129,17 +135,71 @@
     </div>
 </div>
 
+<!-- Context menu for app tiles -->
+<mat-menu #appMenu="matMenu">
+    <button mat-menu-item (click)="openApp(_contextApp)">Open</button>
+    <button mat-menu-item (click)="pinApp(_contextApp)">Pin to Top</button>
+    <button mat-menu-item (click)="unpinApp(_contextApp)">Unpin</button>
+</mat-menu>
+<!-- Separate fixed trigger for the context menu -->
+<button mat-icon-button [matMenuTriggerFor]="appMenu" #fixedMenuTrigger="matMenuTrigger" [style.left]="menuPosition.x"
+    [style.top]="menuPosition.y"
+    style="position: fixed; top: 0; left: 0; width: 0; height: 0; opacity: 0; pointer-events: none;">
+</button>
+
 <!-- Apps overlay with backdrop -->
 @if (showApps()) {
 <div class="apps-backdrop" id="apps-backdrop" (click)="toggleApps()"></div>
 <div class="apps-overlay" id="apps-overlay">
-    <!-- Apps list generated from src/data/apps.js -->
+    <!-- Pinned Apps list -->
+    <input type="text" id="app-filter" class="app-filter" placeholder="Filter apps and extensions..."
+        onclick="this.value='';" (keyup)="handleAppFilterKeyup($event)" />
+
+    <h2 style="margin: 0.5rem 1rem; font-size: 1.2rem;">
+        Pinned Apps
+        <button title="Add custom app">+</button>
+    </h2>
     <div class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
-        <div *ngFor="let app of apps" class="app-tile" style="width: 120px; text-align: center;">
+        <div *ngFor="let app of filteredPinned()" class="app-tile" title="Right-click for menu"
+            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center;">
             <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
                 <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
                     alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
                 <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Heading for Apps list -->
+    <h2 style="margin: 0.5rem 1rem; font-size: 1.2rem;">
+        All Apps
+        <button title="Suggest an app">+</button>
+    </h2>
+    <!-- Apps list generated from src/data/apps.js -->
+    <div class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+        <div *ngFor="let app of filteredApps()" class="app-tile" title="Right-click for menu"
+            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center;">
+            <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
+                <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
+                    alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
+                <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
+            </a>
+        </div>
+    </div>
+
+    <!-- Heading for Extensions list -->
+    <h2 style="margin: 0.5rem 1rem; font-size: 1.2rem;">
+        Browser Extensions
+        <button title="Suggest an extension">+</button>
+    </h2>
+    <!-- Extensions list generated from src/data/extensions.js -->
+    <div class="extensions-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+        <div *ngFor="let ext of filteredExtensions()" class="app-tile" title="Right-click for menu"
+            style="width: 120px; text-align: center;">
+            <a [href]="ext.url" target="_blank" style="text-decoration: none; color: inherit;">
+                <img [src]="ext.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + ext.url)"
+                    alt="{{ext.name}} icon" style="width: 64px; height: 64px;" />
+                <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{ext.name}}</div>
             </a>
         </div>
     </div>

@@ -1,7 +1,11 @@
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
 // @ts-ignore: Importing JS module without type definitions
 import appsData from '../data/apps.js';
+// @ts-ignore: Importing JS module without type definitions
+import extensionsData from '../data/extensions.js';
 import { RouterOutlet } from '@angular/router';
 
 // Import Showdown for markdown rendering
@@ -16,7 +20,7 @@ const CURRENT_MODEL = "openrouter/free";
 @Component({
     selector: 'app-root',
     standalone: true,
-    imports: [RouterOutlet, FormsModule, CommonModule],
+    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule],
     templateUrl: './app.html',
     styleUrl: './app.css',
 })
@@ -59,6 +63,72 @@ export class App implements OnDestroy {
 
     // List of apps for the overlay
     public apps = appsData;
+    // List of extensions for the overlay
+    public extensions = extensionsData;
+    // Filtered lists used for display based on the filter input
+    public filteredApps = signal(this.apps);
+    public filteredExtensions = signal(this.extensions);
+    public filteredPinned = signal(this.getPinnedApps());
+
+    handleAppFilterKeyup(event: KeyboardEvent) {
+        // Prevent default form/button behaviour just in case
+        event?.preventDefault?.();
+        const filterInput = (event.target as HTMLInputElement | null);
+
+        function appinfo_contains_all(app: any, toks: any[]) {
+            // name, description, id, url, tags
+            var s = (app.name || "") + " " + (app.description || "") + " " + (app.id || "")
+                + " " + (app.url || "") + " " + (app.tags ? app.tags.join(" ") : "");
+            s = s.toLowerCase();
+
+            for (var t of toks) {
+                if (!s.includes(t))
+                    return false;
+            }
+            return true;
+        }
+
+        if (filterInput) {
+            var filterText = filterInput.value.trim().toLowerCase();
+            filterText = filterText.replace(/\s+/g, '\x20');
+            var toks = filterText.split("\x20");
+
+            this.filteredApps.set(
+                this.apps.filter((app: any) =>
+                    appinfo_contains_all(app, toks)
+                )
+            );
+            this.filteredExtensions.set(
+                this.extensions.filter((ext: any) =>
+                    appinfo_contains_all(ext, toks)
+                )
+            );
+            this.filteredPinned.set(
+                this.getPinnedApps().filter((app: any) =>
+                    appinfo_contains_all(app, toks)
+                )
+            );
+        }
+    }
+
+    /**
+     * Returns the list of pinned apps based on the IDs stored in localStorage.
+     * The IDs are stored under the key 'pinnedApps' as a JSON array.
+     */
+    public getPinnedApps(): any[] {
+        const stored = localStorage.getItem('pinnedApps');
+        let ids: any[] = [];
+        if (stored) {
+            try {
+                ids = JSON.parse(stored);
+                if (!Array.isArray(ids)) ids = [];
+            } catch {
+                ids = [];
+            }
+        }
+        // Match stored ids with app objects (assumes each app has a unique 'id' property)
+        return this.apps.filter((app: any) => ids.includes(app.id));
+    }
 
     /** Handle for the auto-clear timer so it can be cancelled or reset. */
     private clearTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -178,6 +248,96 @@ export class App implements OnDestroy {
     }
 
     @ViewChild('chatLog', { static: false }) chatLogDiv!: ElementRef<HTMLDivElement>;
+    @ViewChild(MatMenuTrigger) menuTrigger!: MatMenuTrigger;
+    @ViewChild('fixedMenuTrigger') fixedMenuTrigger!: MatMenuTrigger;
+
+    /** Holds the app currently right‑clicked for the context menu */
+    public _contextApp: any = null;
+
+    /** Open the app URL in a new browser tab */
+    protected openApp(app: any): void {
+        if (app && app.url) {
+            window.open(app.url, '_blank');
+        }
+    }
+
+    protected pinApp(app: any): void {
+        // Retrieve existing pinned apps from localStorage or initialize empty array
+        const stored = localStorage.getItem('pinnedApps');
+        let pinned: any[] = [];
+        if (stored) {
+            try {
+                pinned = JSON.parse(stored);
+                if (!Array.isArray(pinned)) pinned = [];
+            } catch {
+                pinned = [];
+            }
+        }
+        // Ensure the app has an identifier (use id property if present, otherwise the whole object)
+        const appId = app?.id ?? app;
+        // Add if not already present
+        if (!pinned.includes(appId)) {
+            pinned.push(appId);
+        }
+        // Save back to localStorage
+        localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+    }
+
+    protected unpinApp(app: any): void {
+        // Retrieve existing pinned apps from localStorage or initialize empty array
+        const stored = localStorage.getItem('pinnedApps');
+        let pinned: any[] = [];
+        if (stored) {
+            try {
+                pinned = JSON.parse(stored);
+                if (!Array.isArray(pinned)) pinned = [];
+            } catch {
+                pinned = [];
+            }
+        }
+        // Determine the identifier used for the app (same logic as pinApp)
+        const appId = app?.id ?? app;
+        // Remove the appId if present
+        const index = pinned.indexOf(appId);
+        if (index !== -1) {
+            pinned.splice(index, 1);
+        }
+        // Save the updated list back to localStorage
+        localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+    }
+
+    menuPosition = { x: '0px', y: '0px' };
+
+    /** Handle right‑click on an app tile to show the context menu */
+    protected openContextMenu(event: MouseEvent, app: any): void {
+        event.preventDefault();
+        this._contextApp = app;
+        // Set menu data for the trigger (used by the hidden fixed trigger)
+        if (this.menuTrigger) {
+            this.menuTrigger.menuData = { app };
+        }
+        // Open the hidden fixed trigger's menu and position it at the click location
+        if (this.fixedMenuTrigger) {
+            this.menuPosition = { x: event.clientX + 'px', y: event.clientY + 'px' };
+            this.fixedMenuTrigger.openMenu();
+
+            // const overlay = (this.fixedMenuTrigger as any).overlayRef;
+            // if (overlay && typeof overlay.updatePosition === 'function') {
+            //     overlay.updatePosition({
+            //         originX: 'start', originY: 'top',
+            //         overlayX: 'start', overlayY: 'top',
+            //         offsetX: event.clientX,
+            //         offsetY: event.clientY,
+            //     });
+            // }
+        }
+    }
+
+    protected clearVaultPassword(): void {
+        // Clear all input fields in the left column, including generated passwords.
+        // Reuse existing clearAll method to reset signals.
+        this.clearAll();
+    }
 
     public async sendMessage(ev: Event) {
         ev.preventDefault();
@@ -327,7 +487,6 @@ export class App implements OnDestroy {
      * destruction to prevent callbacks firing on a destroyed component.
      */
     public ngOnDestroy(): void {
-
         if (this.clearTimerId !== null) {
             clearTimeout(this.clearTimerId);
         }
