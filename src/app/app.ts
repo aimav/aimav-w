@@ -118,6 +118,7 @@ export class App implements OnDestroy {
             const key = input.value.trim();
             if (key) {
                 localStorage.setItem('aiKey', key);
+                alert("AI key set");
             } else {
                 // If empty, remove the stored key
                 if (confirm('Are you sure you want to remove the AI key?'))
