@@ -111,6 +111,18 @@ export class App implements OnDestroy {
         }
     }
 
+    resetAppFilter() {
+        this.filteredApps.set(
+            this.apps
+        );
+        this.filteredExtensions.set(
+            this.extensions
+        );
+        this.filteredPinned.set(
+            this.getPinnedApps()
+        );
+    }
+
     /**
      * Returns the list of pinned apps based on the IDs stored in localStorage.
      * The IDs are stored under the key 'pinnedApps' as a JSON array.
@@ -244,6 +256,7 @@ export class App implements OnDestroy {
      * Toggles the visibility of the Apps overlay.
      */
     protected toggleApps(): void {
+        this.resetAppFilter();
         this.showApps.update(v => !v);
     }
 
@@ -281,6 +294,7 @@ export class App implements OnDestroy {
         }
         // Save back to localStorage
         localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+        this.resetAppFilter();
     }
 
     protected unpinApp(app: any): void {
@@ -304,6 +318,7 @@ export class App implements OnDestroy {
         }
         // Save the updated list back to localStorage
         localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+        this.resetAppFilter();
     }
 
     menuPosition = { x: '0px', y: '0px' };
