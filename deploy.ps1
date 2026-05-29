@@ -1,3 +1,5 @@
+npm run build
+
 rm ../aimav.github.io/*.js
 rm ../aimav.github.io/*.css
 
