@@ -1,22 +1,28 @@
 import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
-// Dexie for IndexedDB storage
-import Dexie from 'dexie';
-// Initialize Dexie database for chat messages
-class AimavDB extends Dexie {
-    // Define a table for chat messages
-    public chatMessages: Dexie.Table<IChatMessage, number>;
 
-    constructor() {
-        super('aimav');
-        // Define schema: auto-increment primary key and indexed fields
-        // Group by year coz RxDB syncs item by item and very slow
-        this.version(2).stores({
-            chatMessages: '++id, year, messages'
-        });
-        this.chatMessages = this.table('chatMessages');
-    }
-}
+import { createRxDatabase } from 'rxdb';
+import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
+
+// Dexie for IndexedDB storage
+// Can't use Dexie directly, need to use RxDB CRUD coz RxDB syncs.
+// import Dexie from 'dexie';
+
+// // Initialize Dexie database for chat messages
+// class AimavDB extends Dexie {
+//     // Define a table for chat messages
+//     public chatMessages: Dexie.Table<IChatMessage, number>;
+
+//     constructor() {
+//         super('aimav');
+//         // Define schema: auto-increment primary key and indexed fields
+//         // Group by year coz RxDB syncs item by item and very slow
+//         this.version(2).stores({
+//             chatMessages: '++id, year, messages'
+//         });
+//         this.chatMessages = this.table('chatMessages');
+//     }
+// }
 
 // Interface for a chat message record
 // Interface representing a chat message stored in IndexedDB.
@@ -25,18 +31,18 @@ class AimavDB extends Dexie {
 // Each stored message includes a unique string identifier `idstr`, the
 // message `content`, and a `timestamp` indicating when it was created.
 // Updated to store an array of messages per year
-interface IChatMessage {
-    id?: number;          // Auto‑generated primary key (Dexie)
-    year: number;         // Year of the message, used for grouping
-    messages: {
-        idstr: string;    // Unique string ID generated via window.new_id()
-        content: string;  // Message text
-        timestamp: number; // Unix epoch ms
-    }[]; // Array of messages for the given year
-}
+// interface IChatMessage {
+//     id?: number;          // Auto‑generated primary key (Dexie)
+//     year: number;         // Year of the message, used for grouping
+//     messages: {
+//         idstr: string;    // Unique string ID generated via window.new_id()
+//         content: string;  // Message text
+//         timestamp: number; // Unix epoch ms
+//     }[]; // Array of messages for the given year
+// }
 
 // Create a singleton instance
-const db = new AimavDB();
+// const db = new AimavDB();
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
@@ -103,6 +109,9 @@ export class App implements OnDestroy {
     protected showApps = signal(false);
 
     protected email = localStorage.getItem('gEmail') || 'None';
+
+    // RxDB instance holder (initialized in ngOnInit)
+    private db: any;
 
     // List of apps for the overlay
     public apps = appsData;
@@ -293,32 +302,39 @@ export class App implements OnDestroy {
         this.signInWithGoogle();
     }
 
+
     /**
-     * Toggles the visibility of the chat log panel.
+     * Load and display stored chat history from RxDB.
+     * The collection `chatMessages` stores messages grouped by year.
+     * This method queries all documents, iterates over each year's messages
+     * and appends them to the chat log element.
      */
-    protected async showChatHistory(): Promise<void> {
-        // Retrieve the most recent 100 chat messages from IndexedDB
+    public async showChatHistory(): Promise<void> {
+        if (!this.db) {
+            console.error('RxDB instance not initialized');
+            return;
+        }
         try {
-            // Retrieve recent year groups; we'll flatten the messages manually
-            const recentMessages = await db.chatMessages
-                .orderBy('year')
-                .reverse()
-                .limit(100)
-                .toArray();
+            const year: number = new Date().getFullYear();
+            const docs = await this.db.chatMessages.find({ year }).exec();
+            let html = "Recent Messages: <br>";
+            let count = 0;
 
-            // Flatten all messages and sort them by timestamp descending
-            const allMsgs = recentMessages.flatMap(rec => {
-                const msgs = Array.isArray(rec.messages) ? rec.messages : [rec.messages];
-                return msgs;
-            }).sort((a, b) => b.timestamp - a.timestamp);
-
-            // Concatenate messages for display
-            var combined = "Recent Messages:<br>" + allMsgs.map(m => "•\x20" + m.content).join('<br>');
-
-            // Show the combined chat history using the message box component
-            this.msgBox.showMsg(combined || 'No chat history.');
-        } catch (e) {
-            console.error('Failed to load chat history', e);
+            // Optionally clear previous entries except intro info
+            // Append each year's messages
+            for (const doc of docs) {
+                for (const msg of doc.messages) {
+                    html += `•\x20${msg.content}<br/>`;
+                    count++;
+                    if (count >= 100) break;
+                }
+                if (count >= 100) break;
+            }
+            if (count === 0) html += "(No messages yet)<br/>";
+            this.msgBox.showMsg(html);
+        }
+        catch (e) {
+            console.error('Failed to load chat history from RxDB', e);
         }
     }
 
@@ -548,10 +564,14 @@ export class App implements OnDestroy {
         top?.location.reload();
     }
 
+    // RxDB instance holder (initialized in ngOnInit)
+    // (declaration moved to end of class)
+
     public async sendMessage(ev: Event) {
         ev.preventDefault();
         const message = this.chatInput();
-        // Save the user's message to IndexedDB using Dexie
+
+        // Save the user's message to IndexedDB using RxDB
         // Store the message grouped by year. If a record for the current year exists,
         // push the new message into its `messages` array; otherwise create a new record.
         try {
@@ -562,23 +582,31 @@ export class App implements OnDestroy {
                 content: message,
                 timestamp: Date.now()
             };
-            // Attempt to fetch an existing year record
-            const existing = await db.chatMessages.where('year').equals(currentYear).first();
-            if (existing) {
-                // Ensure `messages` is an array before pushing
-                const msgs = Array.isArray(existing.messages) ? existing.messages : [existing.messages];
-                msgs.push(newMsg);
-                await db.chatMessages.update(existing.id!, { messages: msgs });
-            } else {
-                // No record for this year yet – create one with an array containing the message
-                await db.chatMessages.add({
+
+            // Attempt to fetch an existing year record using RxDB query
+            const existingDoc = await this.db.chatMessages.findOne({ year: currentYear }).exec();
+
+            if (existingDoc) {
+                const msgs = existingDoc.get('messages') as any[];
+                const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
+                await existingDoc.update({ $set: { messages: updatedMsgs } });
+            }
+            else {
+                // No record for this year yet – insert a new document
+                // Generate a unique id for the document (e.g., using timestamp and year)
+                // @ts-ignore
+                const docId = window.new_id();
+                await this.db.chatMessages.insert({
+                    id: docId,
                     year: currentYear,
                     messages: [newMsg]
                 });
             }
-        } catch (e) {
-            console.error('Failed to store chat message in IndexedDB', e);
         }
+        catch (e) {
+            console.error('Failed to store chat message in IndexedDB via RxDB', e);
+        }
+
         // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
         if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
             const entry = document.createElement('div');
@@ -720,9 +748,42 @@ export class App implements OnDestroy {
         }
     }
 
-    public ngOnInit(): void {
+    public async ngOnInit(): Promise<void> {
         log("Apps data:", this.apps);
         this.apps = this.apps.sort((a: any, b: any) => a.name.localeCompare(b.name));
+
+        // Initialise RxDB and store the instance on the component for later use
+        this.db = await createRxDatabase({
+            name: 'aimav',
+            storage: getRxStorageDexie(),
+        });
+
+        await this.db.addCollections({
+            chatMessages: {
+                schema: {
+                    version: 0,
+                    primaryKey: 'id', // FIELD
+                    type: 'object',
+                    properties: {
+                        id: { type: 'string', maxLength: 100 }, // FIELD
+                        year: { type: 'number' }, // FIELD
+                        messages: { // FIELD
+                            type: 'array',
+                            items: {
+                                type: 'object',
+                                properties: {
+                                    idstr: { type: 'string', maxLength: 100 }, // FIELD
+                                    content: { type: 'string', maxLength: 1000 }, // FIELD
+                                    timestamp: { type: "number" } // FIELD
+                                },
+                                required: ['idstr', 'content', 'timestamp'],
+                            }
+                        },
+                    },
+                    required: ['id', 'year', "messages"],
+                }
+            }
+        });
     }
 
     /**
@@ -735,6 +796,13 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
+
+
+
+
+
 
 
 
