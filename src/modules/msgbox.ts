@@ -1,5 +1,6 @@
 import { Component, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 var log = console.log;
 
 
@@ -15,9 +16,9 @@ var log = console.log;
     ">
       <div style="
         background: white; padding: 2rem; border-radius: 8px;
-        text-align: center; min-width: 200px;
+        text-align: left; min-width: 200px;
       ">
-        <p>{{ message }}</p>
+        <p [innerHTML]="message"></p>
         <button (click)="show = false" style="width:100px; height:40px;">OK</button>
       </div>
     </div>
@@ -25,12 +26,13 @@ var log = console.log;
 })
 export class MessageBoxComponent {
     private cdr = inject(ChangeDetectorRef);
+    private sanitizer = inject(DomSanitizer);
     show = false;
-    message = '';
+    message: SafeHtml = '';
 
     showMsg(msg: string) {
         log("show");
-        this.message = msg;
+        this.message = this.sanitizer.bypassSecurityTrustHtml(msg);
         this.show = true;
         this.cdr.detectChanges();
     }

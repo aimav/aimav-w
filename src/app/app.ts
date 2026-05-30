@@ -290,12 +290,12 @@ export class App implements OnDestroy {
                 .toArray();
 
             // Concatenate messages for display
-            const combined = recentMessages
-                .map(msg => msg.content)
-                .join('\n');
+            var combined = "Recent Messages:<br>";
+            combined += recentMessages
+                .map(msg => "•\x20" + msg.content)
+                .join('<br>');
 
             // Show the combined chat history using the message box component
-            log(combined)
             this.msgBox.showMsg(combined || 'No chat history.');
         } catch (e) {
             console.error('Failed to load chat history', e);
