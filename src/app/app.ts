@@ -1,3 +1,4 @@
+import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
 // Dexie for IndexedDB storage
 import Dexie from 'dexie';
@@ -52,6 +53,7 @@ const CURRENT_MODEL = "openrouter/free";
     imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent],
     templateUrl: './app.html',
     styleUrl: './app.css',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 /**
  * Root component of the Aimav Web Application.
@@ -61,7 +63,7 @@ const CURRENT_MODEL = "openrouter/free";
  */
 export class App implements OnDestroy {
     // Removed MessageService injection as msgbox now provides a component
-    constructor() { }
+    constructor(private cdr: ChangeDetectorRef) { }
     public CUR_MODEL = CURRENT_MODEL;
     protected readonly title = signal('aimav-w');
 
@@ -88,6 +90,8 @@ export class App implements OnDestroy {
 
     /** Whether the Apps overlay is visible. */
     protected showApps = signal(false);
+
+    protected email = localStorage.getItem('gEmail') || 'None';
 
     // List of apps for the overlay
     public apps = appsData;
@@ -275,6 +279,7 @@ export class App implements OnDestroy {
 
 
     async syncNow(event: Event) {
+        this.signInWithGoogle();
     }
 
     /**
@@ -425,13 +430,107 @@ export class App implements OnDestroy {
         this.clearAll();
     }
 
+    public async handleCredentialResponse(response: any): Promise<void> {
+        // console.log(response);
+        /*
+        {
+            "oauth_metadata": "xxx",
+            "gis_params": "xxx",
+            "iss": "https://accounts.google.com",
+            "access_token": "ya29.xxx",
+            "token_type": "Bearer",
+            "expires_in": 3599,
+            "scope": "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid",
+            "authuser": "0",
+            "prompt": "consent"
+        }
+        */
+        // @ts-ignore - window is not defined in this context
+        window.gAccessToken = response.access_token;
+        const accessToken = response.access_token;
+
+        // fetch user info
+        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        const user = await res.json();
+        console.log(user.email, user.name);
+        // @ts-ignore - localStorage is not defined in this context
+        localStorage.gEmail = user.email;
+        this.email = user.email;
+        this.cdr.markForCheck(); // Tell Angular to re-check this component
+    }
+
+    gInitialized = false;
+
     /**
      * Placeholder for Google Sign‑In integration.
      * Currently logs a message; replace with real OAuth flow as needed.
      */
-    public signInWithGoogle(): void {
-        console.log('Google sign‑in button clicked');
-        // TODO: implement actual Google OAuth flow
+    public async signInWithGoogle(): Promise<void> {
+        // https://developers.google.com/identity/gsi/web/guides/display-button#javascript        
+
+        if (this.gInitialized == false) {
+            // @ts-ignore - google is loaded globally from src/libs/gsi.js
+            google.accounts.id.initialize({
+                client_id: "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com",
+                scope: "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid"
+            });
+            this.gInitialized = true;
+        }
+
+        // @ts-ignore - google is loaded globally from src/libs/gsi.js
+        // google.accounts.id.prompt(); // also display the One Tap dialog
+
+        // @ts-ignore
+        var [lock, unlock] = new_lock();
+        const This = this;
+
+        async function handleCredentialResponse(response: any) {
+            try {
+                await This.handleCredentialResponse(response);
+            } finally {
+                unlock();
+            }
+        }
+
+        // @ts-ignore
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: '819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com',
+            scope: "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid",
+            callback: handleCredentialResponse
+        });
+
+        // prompt:
+        // "consent" --> show 3 dialogs always -> clumpsy
+        // "none" --> no dialogs -> no permissions
+        // "select_account" -> choose acc only -> no permissions
+        // null --> default
+        // "" --> default? 3 dialogs once, 1 dialog after that
+        tokenClient.requestAccessToken({ prompt: "" });
+        await lock;
+    }
+
+    public async signOut() {
+        if (this.gInitialized == false) {
+            // @ts-ignore - google is loaded globally from src/libs/gsi.js
+            google.accounts.id.initialize({
+                client_id: "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com"
+            });
+            this.gInitialized = true;
+        }
+
+        var email = localStorage.getItem('gEmail');
+        // @ts-ignore
+        var [lock, unlock] = new_lock();
+        // @ts-ignore
+        google.accounts.id.revoke(email, (response) => {
+            console.log(response.successful, response.error);
+            unlock();
+        });
+        await lock;
+        localStorage.removeItem('gEmail');
+        top?.location.reload();
     }
 
     public async sendMessage(ev: Event) {

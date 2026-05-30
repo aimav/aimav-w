@@ -74,6 +74,11 @@
             <!-- Chat messages appear here -->
             <div id="intro-info" style="border-top:1px solid silver;">
                 <h1>Welcome to Aimav!</h1>
+                Missions
+                <ul>
+                    <li>To be the start page for everything web with AI operate on apps data.</li>
+                    <li>Access: Auth first, UI: AI first then Apps</li>
+                </ul>
                 This is your workspace for both personal use and for other use-cases at work,
                 with authentication tool to generate access info to things you own.
                 You can use the generated vault password for your vault (passsword manager)
@@ -113,9 +118,7 @@
         <div class="input-group">
             <label class="input-label">Account</label>
             <div id="signin-w-google" style="padding-left:16px; height:40px; margin-top:1px;">
-                <a href="javascript:" id="btn-google-signin" (click)="signInWithGoogle()">
-                    Log in
-                </a>
+                <a href="javascript:" (click)="signOut()">Logout</a>&nbsp;<small>{{email.split("@")[0]}}</small>
             </div>
         </div>
 
