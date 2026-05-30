@@ -25,7 +25,17 @@
                                 "input": "public"
                             }
                         ],
-                        "styles": ["src/styles.css"]
+                        "styles": [
+                            "src/styles.css"
+                        ],
+                        "allowedCommonJsDependencies": [
+                            "randombytes",
+                            "simple-peer"
+                        ],
+                        "polyfills": [
+                            "zone.js",
+                            "src/polyfills.ts"
+                        ]
                     },
                     "configurations": {
                         "production": {

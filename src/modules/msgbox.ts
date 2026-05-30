@@ -16,7 +16,7 @@ var log = console.log;
     ">
       <div style="
         background: white; padding: 2rem; border-radius: 8px;
-        text-align: left; min-width: 200px;
+        text-align: left; min-width: 33vw;
       ">
         <p [innerHTML]="message"></p>
         <button (click)="show = false" style="width:100px; height:40px;">OK</button>

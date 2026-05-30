@@ -3,43 +3,7 @@ import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/co
 
 import { createRxDatabase } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
-
-// Dexie for IndexedDB storage
-// Can't use Dexie directly, need to use RxDB CRUD coz RxDB syncs.
-// import Dexie from 'dexie';
-
-// // Initialize Dexie database for chat messages
-// class AimavDB extends Dexie {
-//     // Define a table for chat messages
-//     public chatMessages: Dexie.Table<IChatMessage, number>;
-
-//     constructor() {
-//         super('aimav');
-//         // Define schema: auto-increment primary key and indexed fields
-//         // Group by year coz RxDB syncs item by item and very slow
-//         this.version(2).stores({
-//             chatMessages: '++id, year, messages'
-//         });
-//         this.chatMessages = this.table('chatMessages');
-//     }
-// }
-
-// Interface for a chat message record
-// Interface representing a chat message stored in IndexedDB.
-// The Dexie schema defines fields: auto-increment primary key `id`,
-// a `year` for grouping, and `messages` which holds the actual message data.
-// Each stored message includes a unique string identifier `idstr`, the
-// message `content`, and a `timestamp` indicating when it was created.
-// Updated to store an array of messages per year
-// interface IChatMessage {
-//     id?: number;          // Auto‑generated primary key (Dexie)
-//     year: number;         // Year of the message, used for grouping
-//     messages: {
-//         idstr: string;    // Unique string ID generated via window.new_id()
-//         content: string;  // Message text
-//         timestamp: number; // Unix epoch ms
-//     }[]; // Array of messages for the given year
-// }
+import { replicateGoogleDrive } from 'rxdb/plugins/replication-google-drive';
 
 // Create a singleton instance
 // const db = new AimavDB();
@@ -62,6 +26,7 @@ import { sha1 } from '../modules/common.js';
 var log = console.log;
 // Streaming guide: https://openrouter.ai/openrouter/free
 const CURRENT_MODEL = "openrouter/free";
+const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
 
 @Component({
     selector: 'app-root',
@@ -299,7 +264,41 @@ export class App implements OnDestroy {
 
 
     async syncNow(event: Event) {
-        this.signInWithGoogle();
+        await this.signInWithGoogle();
+
+        // @ts-ignore
+        // if (window.gAccessToken == null) {
+        //     this.msgBox.showMsg("No Google Drive access token found, " +
+        //         "click Sync Data to authenticate with Google Drive.");
+        //     return;
+        // }
+        // const replicationState = await replicateGoogleDrive({
+        //     replicationIdentifier: 'aimav-chatMessages',
+        //     collection: this.db.chatMessages, // RxCollection
+        //     googleDrive: {
+        //         oauthClientId: G_APP_CLIENT_ID,
+        //         // @ts-ignore
+        //         authToken: window.gAccessToken, // USER_ACCESS_TOKEN
+        //         folderPath: 'Aimav/chatMessages'
+        //     },
+        //     live: false, // Do full sync once when user clicks Sync Data
+        //     pull: {
+        //         batchSize: 60,
+        //         modifier: doc => doc // (optional) modify invalid data
+        //     },
+        //     push: {
+        //         batchSize: 60,
+        //         modifier: doc => doc // (optional) modify before sending
+        //     }
+        // });
+
+        // // Observe replication states
+        // replicationState.error$.subscribe(err => {
+        //     console.error('Replication error:', err);
+        // });
+        // replicationState.awaitInitialReplication().then(() => {
+        //     console.log('Initial replication done');
+        // });
     }
 
 
@@ -504,7 +503,7 @@ export class App implements OnDestroy {
         if (this.gInitialized == false) {
             // @ts-ignore - google is loaded globally from src/libs/gsi.js
             google.accounts.id.initialize({
-                client_id: "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com",
+                client_id: G_APP_CLIENT_ID,
                 scope: "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid"
             });
             this.gInitialized = true;
@@ -527,7 +526,7 @@ export class App implements OnDestroy {
 
         // @ts-ignore
         const tokenClient = google.accounts.oauth2.initTokenClient({
-            client_id: '819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com',
+            client_id: G_APP_CLIENT_ID,
             scope: "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid",
             callback: handleCredentialResponse
         });
@@ -546,7 +545,7 @@ export class App implements OnDestroy {
         if (this.gInitialized == false) {
             // @ts-ignore - google is loaded globally from src/libs/gsi.js
             google.accounts.id.initialize({
-                client_id: "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com"
+                client_id: G_APP_CLIENT_ID
             });
             this.gInitialized = true;
         }
@@ -796,19 +795,5 @@ export class App implements OnDestroy {
         }
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
