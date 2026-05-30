@@ -538,7 +538,11 @@ export class App implements OnDestroy {
         const message = this.chatInput();
         // Save the user's message to IndexedDB using Dexie
         try {
-            await db.chatMessages.add({ content: message, timestamp: Date.now() });
+            await db.chatMessages.add({
+                // @ts-ignore
+                idstr: window.new_id(),
+                content: message, timestamp: Date.now()
+            });
         } catch (e) {
             console.error('Failed to store chat message in IndexedDB', e);
         }
@@ -567,6 +571,10 @@ export class App implements OnDestroy {
             manuallyScrolled = true;
         });
 
+        if (!apiKey) {
+            this.msgBox.showMsg("Please get AI key and save it on right column first.")
+            return;
+        }
         if (apiKey) {
             // Show a temporary "Asking model..." message in the chat log
             const askingDiv = document.createElement('div');

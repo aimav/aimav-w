@@ -17,6 +17,9 @@
             var unlock, lock = new Promise((res, rej) => { unlock = res });
             return [lock, unlock];
         };
+        window.new_id = function () {
+            return `${Date.now()}-${Math.random().toString().replace('.', '')}`;
+        };
     </script>
 </head>
 
