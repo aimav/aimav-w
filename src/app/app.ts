@@ -274,7 +274,7 @@ export class App implements OnDestroy {
     }
 
 
-    async setupSync(event: Event) {
+    async syncNow(event: Event) {
     }
 
     /**
