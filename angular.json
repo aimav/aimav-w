@@ -33,7 +33,6 @@
                             "simple-peer"
                         ],
                         "polyfills": [
-                            "zone.js",
                             "src/polyfills.ts"
                         ]
                     },
