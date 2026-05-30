@@ -38,16 +38,16 @@
         </div>
         <div class="separator-div" style="border-top:1px solid #777; margin-top:1rem;">&nbsp;</div>
 
-        <div class="input-group">
+        <div class="input-group" style="opacity:.5;">
             <label class="input-label" for="input-domain">Domain</label>
             <input class="input-field" id="input-domain" type="text" placeholder="Domain/Username"
                 [(ngModel)]="domain" />
         </div>
 
-        <button class="action-btn" id="btn-get-service-password" (click)="getServicePassword()">Get Service
-            Password</button>
+        <button class="action-btn" id="btn-get-service-password" (click)="getServicePassword()" style="opacity:.5;">Get
+            Service Password</button>
 
-        <div class="input-group">
+        <div class="input-group" style="opacity:.5;">
             <label class="input-label" for="input-service-password">Service Password</label>
             <input class="input-field" id="input-service-password" placeholder="Service password"
                 [value]="servicePassword()" readonly onclick="this.select();" />
@@ -78,17 +78,18 @@
                 This is your workspace for both personal use and for other use-cases at work,
                 with authentication tool to generate access info to things you own.
                 You can use the generated vault password for your vault (passsword manager)
-                software or browser extension. The service password generating feature
-                is for side use (side use only 'cause when auth root info ie. the fields shape & sound
+                software or browser extension. The <i>service password generating feature
+                    is for side use</i> (side use only 'cause when auth root info ie. the fields shape & sound
                 are changed, all the services need to be updated with new passwords).
                 <div>&nbsp;</div>
-                AI chatbot is also ready to use with integration with some apps.
+                Along side with authentication
+                <ul>
+                    <li>AI chatbot is also ready to use with integration with some apps.</li>
+                    <li>There are also apps available to pin to use.</li>
+                </ul>
                 <div>&nbsp;</div>
-                There are also apps available to pin to use.
-                <div>&nbsp;</div>
-                Aimav is a good start page for anything web.
-                <div>&nbsp;</div>
-                Have a nice day! Happy exploring!
+                Aimav is a good start page for anything web.<br>
+                Have a nice day! Happy living, working!
             </div>
         </div>
         <!-- } -->
@@ -98,7 +99,7 @@
             <textarea class="chat-textarea" id="chat-input" rows="2" placeholder="Type a message..."
                 [(ngModel)]="chatInput" (keyup.enter)="sendMessage($event)"></textarea>
             <div class="chat-actions">
-                <button class="chat-btn" id="btn-chat" (click)="toggleChat()">Chat</button>
+                <button type="button" class="chat-btn" id="btn-chat" (click)="showChatHistory()">Chat</button>
                 <button class="chat-btn" id="btn-apps" (click)="toggleApps()">Apps</button>
             </div>
         </div>
@@ -135,7 +136,10 @@
         <div class="input-group">
             <label class="input-label">Current Model</label>
             <div style="height:40px; margin-top:1px;">
-                <a target="_blank" style="padding-left:16px;" href="javascript:">{{CUR_MODEL}}</a>
+                <a target="_blank" style="padding-left:16px;" href="javascript:"
+                    (click)="showModelInfo($event)">Model</a>
+                <a target="_blank" style="padding-left:16px;" href="javascript:" (click)="setupSync($event)">Sync
+                    Data</a>
             </div>
         </div>
 
@@ -223,4 +227,5 @@
 </div>
 }
 
+<app-message-box #msgBox />
 <router-outlet />

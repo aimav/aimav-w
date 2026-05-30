@@ -1,7 +1,35 @@
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
+// Dexie for IndexedDB storage
+import Dexie from 'dexie';
+// Initialize Dexie database for chat messages
+class AimavDB extends Dexie {
+    // Define a table for chat messages
+    public chatMessages: Dexie.Table<IChatMessage, number>;
+
+    constructor() {
+        super('aimav');
+        // Define schema: auto-increment primary key and indexed fields
+        this.version(1).stores({
+            chatMessages: '++id, timestamp, content'
+        });
+        this.chatMessages = this.table('chatMessages');
+    }
+}
+
+// Interface for a chat message record
+interface IChatMessage {
+    id?: number;
+    content: string;
+    timestamp: number;
+}
+
+// Create a singleton instance
+const db = new AimavDB();
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
+// Updated import to match new msgbox.ts which now exports a component instead of a service
+import { MessageBoxComponent } from '../modules/msgbox';
 // @ts-ignore: Importing JS module without type definitions
 import appsData from '../data/apps.js';
 // @ts-ignore: Importing JS module without type definitions
@@ -20,7 +48,8 @@ const CURRENT_MODEL = "openrouter/free";
 @Component({
     selector: 'app-root',
     standalone: true,
-    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule],
+    // Import MsgBoxComponent (standalone) for displaying messages
+    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent],
     templateUrl: './app.html',
     styleUrl: './app.css',
 })
@@ -31,6 +60,8 @@ const CURRENT_MODEL = "openrouter/free";
  * input fields 1 minute after the last password generation action.
  */
 export class App implements OnDestroy {
+    // Removed MessageService injection as msgbox now provides a component
+    constructor() { }
     public CUR_MODEL = CURRENT_MODEL;
     protected readonly title = signal('aimav-w');
 
@@ -54,9 +85,6 @@ export class App implements OnDestroy {
 
     /** Current value of the chat textarea. */
     protected chatInput = signal('');
-
-    /** Whether the chat log panel is visible. */
-    protected showChat = signal(false);
 
     /** Whether the Apps overlay is visible. */
     protected showApps = signal(false);
@@ -245,11 +273,33 @@ export class App implements OnDestroy {
         this.resetClearTimer();
     }
 
+
+    async setupSync(event: Event) {
+    }
+
     /**
      * Toggles the visibility of the chat log panel.
      */
-    protected toggleChat(): void {
-        this.showChat.update(v => !v);
+    protected async showChatHistory(): Promise<void> {
+        // Retrieve the most recent 100 chat messages from IndexedDB
+        try {
+            const recentMessages = await db.chatMessages
+                .orderBy('timestamp')
+                .reverse()
+                .limit(100)
+                .toArray();
+
+            // Concatenate messages for display
+            const combined = recentMessages
+                .map(msg => msg.content)
+                .join('\n');
+
+            // Show the combined chat history using the message box component
+            log(combined)
+            this.msgBox.showMsg(combined || 'No chat history.');
+        } catch (e) {
+            console.error('Failed to load chat history', e);
+        }
     }
 
     /**
@@ -263,6 +313,8 @@ export class App implements OnDestroy {
     @ViewChild('chatLog', { static: false }) chatLogDiv!: ElementRef<HTMLDivElement>;
     @ViewChild(MatMenuTrigger) menuTrigger!: MatMenuTrigger;
     @ViewChild('fixedMenuTrigger') fixedMenuTrigger!: MatMenuTrigger;
+    // Reference to the message box component for showing messages
+    @ViewChild(MessageBoxComponent) msgBox!: MessageBoxComponent;
 
     /** Holds the app currently right‑clicked for the context menu */
     public _contextApp: any = null;
@@ -348,6 +400,25 @@ export class App implements OnDestroy {
         }
     }
 
+    /**
+     * Displays a message box with the current model name.
+     * Uses the MessageService to show an informational toast.
+     */
+    /**
+     * Displays a message box with the current model name.
+     */
+    /** Show a toast with the current model name. */
+    public async showModelInfo(event: Event): Promise<void> {
+        event.preventDefault();
+        // Use the message box component to display the current model name
+        if (this.msgBox) {
+            this.msgBox.showMsg(`Current model: ${this.CUR_MODEL}`);
+        } else {
+            // Fallback in case the component reference is not available
+            console.log(`Current model: ${this.CUR_MODEL}`);
+        }
+    }
+
     protected clearVaultPassword(): void {
         // Clear all input fields in the left column, including generated passwords.
         // Reuse existing clearAll method to reset signals.
@@ -357,6 +428,12 @@ export class App implements OnDestroy {
     public async sendMessage(ev: Event) {
         ev.preventDefault();
         const message = this.chatInput();
+        // Save the user's message to IndexedDB using Dexie
+        try {
+            await db.chatMessages.add({ content: message, timestamp: Date.now() });
+        } catch (e) {
+            console.error('Failed to store chat message in IndexedDB', e);
+        }
         // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
         if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
             const entry = document.createElement('div');

@@ -20,6 +20,9 @@
         "@angular/material": "^21.2.13",
         "@angular/platform-browser": "^21.2.0",
         "@angular/router": "^21.2.0",
+        "dexie": "^4.4.3",
+        "events": "^3.3.0",
+        "rxdb": "^17.3.0",
         "rxjs": "~7.8.0",
         "showdown": "^2.1.0",
         "tslib": "^2.3.0"

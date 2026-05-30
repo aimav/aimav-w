@@ -1,4 +1,8 @@
 /* Global resets to ensure layout takes full screen */
+* {
+    font-family: sans-serif;
+}
+
 html,
 body {
     margin: 0;
