@@ -10,18 +10,29 @@ class AimavDB extends Dexie {
     constructor() {
         super('aimav');
         // Define schema: auto-increment primary key and indexed fields
-        this.version(1).stores({
-            chatMessages: '++id, timestamp, content'
+        // Group by year coz RxDB syncs item by item and very slow
+        this.version(2).stores({
+            chatMessages: '++id, year, messages'
         });
         this.chatMessages = this.table('chatMessages');
     }
 }
 
 // Interface for a chat message record
+// Interface representing a chat message stored in IndexedDB.
+// The Dexie schema defines fields: auto-increment primary key `id`,
+// a `year` for grouping, and `messages` which holds the actual message data.
+// Each stored message includes a unique string identifier `idstr`, the
+// message `content`, and a `timestamp` indicating when it was created.
+// Updated to store an array of messages per year
 interface IChatMessage {
-    id?: number;
-    content: string;
-    timestamp: number;
+    id?: number;          // Auto‑generated primary key (Dexie)
+    year: number;         // Year of the message, used for grouping
+    messages: {
+        idstr: string;    // Unique string ID generated via window.new_id()
+        content: string;  // Message text
+        timestamp: number; // Unix epoch ms
+    }[]; // Array of messages for the given year
 }
 
 // Create a singleton instance
@@ -288,17 +299,21 @@ export class App implements OnDestroy {
     protected async showChatHistory(): Promise<void> {
         // Retrieve the most recent 100 chat messages from IndexedDB
         try {
+            // Retrieve recent year groups; we'll flatten the messages manually
             const recentMessages = await db.chatMessages
-                .orderBy('timestamp')
+                .orderBy('year')
                 .reverse()
                 .limit(100)
                 .toArray();
 
+            // Flatten all messages and sort them by timestamp descending
+            const allMsgs = recentMessages.flatMap(rec => {
+                const msgs = Array.isArray(rec.messages) ? rec.messages : [rec.messages];
+                return msgs;
+            }).sort((a, b) => b.timestamp - a.timestamp);
+
             // Concatenate messages for display
-            var combined = "Recent Messages:<br>";
-            combined += recentMessages
-                .map(msg => "•\x20" + msg.content)
-                .join('<br>');
+            var combined = "Recent Messages:<br>" + allMsgs.map(m => "•\x20" + m.content).join('<br>');
 
             // Show the combined chat history using the message box component
             this.msgBox.showMsg(combined || 'No chat history.');
@@ -537,12 +552,30 @@ export class App implements OnDestroy {
         ev.preventDefault();
         const message = this.chatInput();
         // Save the user's message to IndexedDB using Dexie
+        // Store the message grouped by year. If a record for the current year exists,
+        // push the new message into its `messages` array; otherwise create a new record.
         try {
-            await db.chatMessages.add({
-                // @ts-ignore
-                idstr: window.new_id(),
-                content: message, timestamp: Date.now()
-            });
+            const currentYear = new Date().getFullYear();
+            const newMsg = {
+                // @ts-ignore – window.new_id is defined globally
+                idstr: (window as any).new_id(),
+                content: message,
+                timestamp: Date.now()
+            };
+            // Attempt to fetch an existing year record
+            const existing = await db.chatMessages.where('year').equals(currentYear).first();
+            if (existing) {
+                // Ensure `messages` is an array before pushing
+                const msgs = Array.isArray(existing.messages) ? existing.messages : [existing.messages];
+                msgs.push(newMsg);
+                await db.chatMessages.update(existing.id!, { messages: msgs });
+            } else {
+                // No record for this year yet – create one with an array containing the message
+                await db.chatMessages.add({
+                    year: currentYear,
+                    messages: [newMsg]
+                });
+            }
         } catch (e) {
             console.error('Failed to store chat message in IndexedDB', e);
         }
@@ -702,5 +735,12 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
+
+
+
+
+
 
 
