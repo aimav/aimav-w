@@ -425,6 +425,15 @@ export class App implements OnDestroy {
         this.clearAll();
     }
 
+    /**
+     * Placeholder for Google Sign‑In integration.
+     * Currently logs a message; replace with real OAuth flow as needed.
+     */
+    public signInWithGoogle(): void {
+        console.log('Google sign‑in button clicked');
+        // TODO: implement actual Google OAuth flow
+    }
+
     public async sendMessage(ev: Event) {
         ev.preventDefault();
         const message = this.chatInput();
@@ -586,4 +595,5 @@ export class App implements OnDestroy {
         }
     }
 }
+
 
