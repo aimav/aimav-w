@@ -1,9 +1,11 @@
 import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
 
-import { createRxDatabase } from 'rxdb';
+import { createRxDatabase, addRxPlugin } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
 import { replicateGoogleDrive } from 'rxdb/plugins/replication-google-drive';
+import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
+addRxPlugin(RxDBUpdatePlugin);
 
 // Create a singleton instance
 // const db = new AimavDB();
