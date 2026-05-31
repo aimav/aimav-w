@@ -664,6 +664,8 @@ export class App implements OnDestroy {
         // push the new message into its `messages` array; otherwise create a new record.
         try {
             const currentYear = new Date().getFullYear();
+            // Prepare the new message object and compute token array from its content
+            const tokenArray = this.normalise(message).split(' ');
             const newMsg = {
                 // @ts-ignore – window.new_id is defined globally
                 idstr: (window as any).new_id(),
@@ -677,7 +679,10 @@ export class App implements OnDestroy {
             if (existingDoc) {
                 const msgs = existingDoc.get('messages') as any[];
                 const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
-                await existingDoc.update({ $set: { messages: updatedMsgs } });
+                // Update tokens field by appending tokens from the new message
+                const existingTokens = existingDoc.get('tokens') as any[] || [];
+                const updatedTokens = Array.isArray(existingTokens) ? [...existingTokens, ...tokenArray] : [...tokenArray];
+                await existingDoc.update({ $set: { messages: updatedMsgs, tokens: updatedTokens } });
             }
             else {
                 // No record for this year yet – insert a new document
@@ -687,7 +692,8 @@ export class App implements OnDestroy {
                 await this.db.chatMessages.insert({
                     id: docId,
                     year: currentYear,
-                    messages: [newMsg]
+                    messages: [newMsg],
+                    tokens: tokenArray
                 });
             }
         }
@@ -860,6 +866,7 @@ export class App implements OnDestroy {
         }
     }
 }
+
 
 
 
