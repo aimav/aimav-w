@@ -17,6 +17,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
 // Updated import to match new msgbox.ts which now exports a component instead of a service
 import { MessageBoxComponent } from '../modules/msgbox';
+import { ConfirmBoxComponent } from '../modules/confirmbox';
 // @ts-ignore: Importing JS module without type definitions
 import appsData from '../data/apps.js';
 // @ts-ignore: Importing JS module without type definitions
@@ -99,7 +100,7 @@ const RXDB_SCHEMAS = {
     selector: 'app-root',
     standalone: true,
     // Import MsgBoxComponent (standalone) for displaying messages
-    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent],
+    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent],
     templateUrl: './app.html',
     styleUrl: './app.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -291,7 +292,7 @@ export class App implements OnDestroy {
      * and stores it in the browser's localStorage under the key "aiKey".
      * Uses Angular's ViewChild to access the element in an Angular‑friendly way.
      */
-    public setAIKey(event: Event): void {
+    public async setAIKey(event: Event): Promise<void> {
         // Prevent default form/button behaviour just in case
         event?.preventDefault?.();
         // Access the input element via the DOM. Since the element is not a component
@@ -301,10 +302,10 @@ export class App implements OnDestroy {
             const key = input.value.trim();
             if (key) {
                 localStorage.setItem('aiKey', key);
-                alert("AI key set");
+                this.msgBox.showMsg("AI key set");
             } else {
                 // If empty, remove the stored key
-                if (confirm('Are you sure you want to remove the AI key?'))
+                if ((await this.showConfirm('Are you sure you want to remove the AI key?')) == 'yes')
                     localStorage.removeItem('aiKey');
             }
         }
@@ -439,6 +440,13 @@ export class App implements OnDestroy {
     @ViewChild('fixedMenuTrigger') fixedMenuTrigger!: MatMenuTrigger;
     // Reference to the message box component for showing messages
     @ViewChild(MessageBoxComponent) msgBox!: MessageBoxComponent;
+
+    // Reference to the confirm box component for showing messages
+    @ViewChild(ConfirmBoxComponent) confirmBox!: ConfirmBoxComponent;
+
+    protected async showConfirm(msg: string): Promise<"yes" | "no"> {
+        return await this.confirmBox.showConfirm(msg);
+    }
 
     /** Holds the app currently right‑clicked for the context menu */
     public _contextApp: any = null;
