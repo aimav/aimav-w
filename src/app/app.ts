@@ -7,6 +7,9 @@ import { replicateGoogleDrive } from 'rxdb/plugins/replication-google-drive';
 import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
 addRxPlugin(RxDBUpdatePlugin);
 
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+addRxPlugin(RxDBMigrationSchemaPlugin);
+
 // Create a singleton instance
 // const db = new AimavDB();
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
@@ -29,6 +32,68 @@ var log = console.log;
 // Streaming guide: https://openrouter.ai/openrouter/free
 const CURRENT_MODEL = "openrouter/free";
 const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
+
+const RXDB_SCHEMAS = {
+    chatMessages: {
+        schema: {
+            version: 1,
+            primaryKey: 'id', // FIELD
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 }, // FIELD
+                tokens: { // Lite FTS to avoid filtering 'messages' array
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                year: { type: 'number' }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                messages: { // FIELD
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            idstr: { type: 'string', maxLength: 100 }, // FIELD
+                            content: { type: 'string', maxLength: 1000 }, // FIELD
+                            timestamp: { type: "number" } // FIELD
+                        },
+                        required: ['idstr', 'content', 'timestamp'],
+                    }
+                },
+            },
+            required: ['id', "tokens", 'year', "messages"],
+            indexes: ["id", "tokens", "year"]
+        }
+    },
+    notes: {
+        schema: {
+            version: 0,
+            primaryKey: 'id',
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 },
+                tokens: { // Lite FTS to avoid filtering 'notes' array
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                year: { type: 'number' }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                notes: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            idstr: { type: 'string', maxLength: 100 },
+                            title: { type: "string", maxLength: 1000 },
+                            content: { type: 'string', maxLength: 10000 },
+                            timestamp: { type: "number" }
+                        },
+                        required: ['idstr', "title", 'content', 'timestamp'],
+                    }
+                },
+            },
+            required: ['id', "tokens", 'year', "notes"],
+            indexes: ["id", "tokens", "year"]
+        }
+    }
+};
 
 @Component({
     selector: 'app-root',
@@ -782,32 +847,7 @@ export class App implements OnDestroy {
             storage: getRxStorageDexie(),
         });
 
-        await this.db.addCollections({
-            chatMessages: {
-                schema: {
-                    version: 0,
-                    primaryKey: 'id', // FIELD
-                    type: 'object',
-                    properties: {
-                        id: { type: 'string', maxLength: 100 }, // FIELD
-                        year: { type: 'number' }, // FIELD
-                        messages: { // FIELD
-                            type: 'array',
-                            items: {
-                                type: 'object',
-                                properties: {
-                                    idstr: { type: 'string', maxLength: 100 }, // FIELD
-                                    content: { type: 'string', maxLength: 1000 }, // FIELD
-                                    timestamp: { type: "number" } // FIELD
-                                },
-                                required: ['idstr', 'content', 'timestamp'],
-                            }
-                        },
-                    },
-                    required: ['id', 'year', "messages"],
-                }
-            }
-        });
+        await this.db.addCollections(RXDB_SCHEMAS);
     }
 
     /**
