@@ -56,4 +56,9 @@ body {
     border-radius: 50%;
     box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
     z-index: 2;
+    cursor: default;
+}
+
+.app-tile img {
+    border-radius: 10px;
 }
