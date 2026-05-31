@@ -298,6 +298,7 @@ export class App implements OnDestroy {
         // Access the input element via the DOM. Since the element is not a component
         // property, we query it directly but still within Angular's zone.
         const input = (event.target as HTMLElement).ownerDocument.getElementById('input-ai-key') as HTMLInputElement | null;
+
         if (input) {
             const key = input.value.trim();
             if (key) {
