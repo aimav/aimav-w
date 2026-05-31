@@ -186,14 +186,16 @@
         Pinned Apps
         <button title="Add custom app">+</button>
     </h2>
-    <div class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+    <div id="pinned-app-list" class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
         <div *ngFor="let app of filteredPinned()" class="app-tile" title="Right-click for menu"
-            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center;">
+            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center; position: relative;">
             <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
                 <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
                     alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
                 <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
             </a>
+            <!-- Marker for internal apps -->
+            <span *ngIf="app.internal" class="internal-marker" title="Built-in app">B</span>
         </div>
     </div>
 
@@ -203,14 +205,15 @@
         <button title="Suggest an app">+</button>
     </h2>
     <!-- Apps list generated from src/data/apps.js -->
-    <div class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+    <div id="all-app-list" class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
         <div *ngFor="let app of filteredApps()" class="app-tile" title="Right-click for menu"
-            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center;">
+            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center; position: relative;">
             <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
                 <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
                     alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
                 <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
             </a>
+            <span *ngIf="app.internal" class="internal-marker" title="Built-in app">B</span>
         </div>
     </div>
 

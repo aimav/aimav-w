@@ -85,9 +85,9 @@ export class App implements OnDestroy {
     // List of extensions for the overlay
     public extensions = extensionsData;
     // Filtered lists used for display based on the filter input
-    public filteredApps = signal(this.apps);
+    public filteredApps = signal(this.sortApps(this.apps));
     public filteredExtensions = signal(this.extensions);
-    public filteredPinned = signal(this.getPinnedApps());
+    public filteredPinned = signal(this.sortApps(this.getPinnedApps()));
 
     handleAppFilterKeyup(event: KeyboardEvent) {
         // Prevent default form/button behaviour just in case
@@ -113,9 +113,9 @@ export class App implements OnDestroy {
             var toks = filterText.split("\x20");
 
             this.filteredApps.set(
-                this.apps.filter((app: any) =>
+                this.sortApps(this.apps.filter((app: any) =>
                     appinfo_contains_all(app, toks)
-                )
+                ))
             );
             this.filteredExtensions.set(
                 this.extensions.filter((ext: any) =>
@@ -123,22 +123,22 @@ export class App implements OnDestroy {
                 )
             );
             this.filteredPinned.set(
-                this.getPinnedApps().filter((app: any) =>
+                this.sortApps(this.getPinnedApps().filter((app: any) =>
                     appinfo_contains_all(app, toks)
-                )
+                ))
             );
         }
     }
 
     resetAppFilter() {
         this.filteredApps.set(
-            this.apps
+            this.sortApps(this.apps)
         );
         this.filteredExtensions.set(
             this.extensions
         );
         this.filteredPinned.set(
-            this.getPinnedApps()
+            this.sortApps(this.getPinnedApps())
         );
     }
 
@@ -159,6 +159,23 @@ export class App implements OnDestroy {
         }
         // Match stored ids with app objects (assumes each app has a unique 'id' property)
         return this.apps.filter((app: any) => ids.includes(app.id));
+    }
+
+    /**
+     * Sort a list of apps so that those with `internal=true` appear first,
+     * followed by alphabetical order of the app name (case‑insensitive).
+     */
+    private sortApps(list: any[]): any[] {
+        return list.slice().sort((a: any, b: any) => {
+            const aInternal = !!a.internal;
+            const bInternal = !!b.internal;
+            if (aInternal !== bInternal) {
+                return aInternal ? -1 : 1;
+            }
+            const nameA = (a.name || "").toLowerCase();
+            const nameB = (b.name || "").toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
     }
 
     /** Handle for the auto-clear timer so it can be cancelled or reset. */
@@ -751,7 +768,8 @@ export class App implements OnDestroy {
 
     public async ngOnInit(): Promise<void> {
         log("Apps data:", this.apps);
-        this.apps = this.apps.sort((a: any, b: any) => a.name.localeCompare(b.name));
+        // Sort apps: internal apps first, then alphabetically by name
+        this.apps = this.sortApps(this.apps);
 
         // Initialise RxDB and store the instance on the component for later use
         this.db = await createRxDatabase({
@@ -797,5 +815,7 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
 
 

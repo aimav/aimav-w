@@ -1,11 +1,21 @@
 export default [{
+    name: "Calculator",
+    icon: "https://www.calculator.net/favicon.ico",
+    description: "Standard calculator",
+    id: "aimav.github.io/calculator",
+    url: "/apps/calculator",
+    tags: ["utility", "tool"],
+    integrated: false,
+    internal: true
+}, {
     name: "RemNote",
     icon: null,
     description: "Note taking app with graph features and convenient editor",
     id: "remnote.com",
     url: "https://remnote.com",
     tags: ["notes", "graph", "zettelkasten", "free", "web", "online", "convenient"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Capacities",
     icon: null,
@@ -13,7 +23,8 @@ export default [{
     id: "capacities.io",
     url: "https://capacities.io",
     tags: ["notes", "graph", "zettelkasten", "free", "web", "online"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Proton Drive",
     icon: null,
@@ -21,7 +32,8 @@ export default [{
     id: "drive.proton.me",
     url: "https://drive.proton.me",
     tags: ["encrypted", "e2ee", "cloud", "drive", "free"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Google Drive",
     icon: null,
@@ -29,7 +41,8 @@ export default [{
     id: "drive.google.com",
     url: "https://drive.google.com",
     tags: ["cloud", "drive", "free"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Photopea",
     icon: null,
@@ -37,7 +50,8 @@ export default [{
     id: "photopea.com",
     url: "https://photopea.com",
     tags: ["graphics", "design", "imaging", "free", "ads-with", "online"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Claude",
     icon: null,
@@ -45,7 +59,8 @@ export default [{
     id: "claude.ai",
     url: "https://claude.ai",
     tags: ["online", "coding", "free", "ai", "free"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "ChatGPT",
     icon: null,
@@ -53,7 +68,8 @@ export default [{
     id: "chatgpt.com",
     url: "https://chatgpt.com",
     tags: ["online", "ai", "free", "gpt"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Gemini",
     icon: null,
@@ -61,7 +77,8 @@ export default [{
     id: "gemini.google.com",
     url: "https://gemini.google.com",
     tags: ["online", "ai", "free", "coding", "google"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Lumo",
     icon: null,
@@ -69,7 +86,8 @@ export default [{
     id: "lumo.proton.me",
     url: "https://lumo.proton.me",
     tags: ["online", "free", "privacy", "ai"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Duck AI",
     icon: null,
@@ -77,7 +95,8 @@ export default [{
     id: "duck.ai",
     url: "https://duck.ai",
     tags: ["online", "ai", "privacy", "free"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Proton Mail",
     icon: null,
@@ -85,7 +104,8 @@ export default [{
     id: "mail.proton.me",
     url: "https://mail.proton.me",
     tags: ["free", "email", "mail", "encrypted"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Gmail",
     icon: null,
@@ -93,7 +113,8 @@ export default [{
     id: "gmail.com",
     url: "https://gmail.com",
     tags: ["online", "free", "email", "mail"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "YouTube",
     icon: null,
@@ -101,7 +122,8 @@ export default [{
     id: "youtube.com",
     url: "https://youtube.com",
     tags: ["online", "music", "clips", "news"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "WordPress",
     icon: null,
@@ -109,7 +131,8 @@ export default [{
     id: "wordpress.com",
     url: "https://wordpress.com",
     tags: ["online", "blogging"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Blogger",
     icon: null,
@@ -117,7 +140,8 @@ export default [{
     id: "blogger.com",
     url: "https://blogger.com",
     tags: ["online", "blogging", "domain", "hosted"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Tumblr",
     icon: null,
@@ -125,7 +149,8 @@ export default [{
     id: "tumbr.com",
     url: "https://tumblr.com",
     tags: ["online", "blogging", "micro", "microblogging"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "Facebook",
     icon: null,
@@ -133,7 +158,8 @@ export default [{
     id: "facebook.com",
     url: "https://facebook.com",
     tags: ["online", "social", "network"],
-    integrated: false
+    integrated: false,
+    internal: false
 }, {
     name: "X.com",
     icon: null,
@@ -141,5 +167,6 @@ export default [{
     id: "x.com",
     url: "https://x.com",
     tags: ["online", "social", "network"],
-    integrated: false
+    integrated: false,
+    internal: false
 }];

@@ -39,3 +39,21 @@ body {
     border-radius: 1rem;
     padding-left: 1rem;
 }
+
+/* Marker for internal apps: letter A inside a circle positioned at bottom‑right of the app‑tile */
+.internal-marker {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 20px;
+    height: 20px;
+    background: #ff5722;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    border-radius: 50%;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    z-index: 2;
+}

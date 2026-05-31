@@ -5,6 +5,7 @@ rm ../aimav.github.io/*.css
 
 cp ./public/img/*.* ../aimav.github.io/img
 cp ./public/libs/*.* ../aimav.github.io/libs
+cp ./public/apps/calculator/*.* ../aimav.github.io/apps/calculator
 
 cp ./dist/aimav-w/browser/*.* ../aimav.github.io
 
