@@ -286,38 +286,38 @@ export class App implements OnDestroy {
         await this.signInWithGoogle();
 
         // @ts-ignore
-        // if (window.gAccessToken == null) {
-        //     this.msgBox.showMsg("No Google Drive access token found, " +
-        //         "click Sync Data to authenticate with Google Drive.");
-        //     return;
-        // }
-        // const replicationState = await replicateGoogleDrive({
-        //     replicationIdentifier: 'aimav-chatMessages',
-        //     collection: this.db.chatMessages, // RxCollection
-        //     googleDrive: {
-        //         oauthClientId: G_APP_CLIENT_ID,
-        //         // @ts-ignore
-        //         authToken: window.gAccessToken, // USER_ACCESS_TOKEN
-        //         folderPath: 'Aimav/chatMessages'
-        //     },
-        //     live: false, // Do full sync once when user clicks Sync Data
-        //     pull: {
-        //         batchSize: 60,
-        //         modifier: doc => doc // (optional) modify invalid data
-        //     },
-        //     push: {
-        //         batchSize: 60,
-        //         modifier: doc => doc // (optional) modify before sending
-        //     }
-        // });
+        if (window.gAccessToken == null) {
+            this.msgBox.showMsg("No Google Drive access token found, " +
+                "click Sync Data to authenticate with Google Drive.");
+            return;
+        }
+        const replicationState = await replicateGoogleDrive({
+            replicationIdentifier: 'aimav-chatMessages',
+            collection: this.db.chatMessages, // RxCollection
+            googleDrive: {
+                oauthClientId: G_APP_CLIENT_ID,
+                // @ts-ignore
+                authToken: window.gAccessToken, // USER_ACCESS_TOKEN
+                folderPath: 'Aimav/chatMessages'
+            },
+            live: false, // Do full sync once when user clicks Sync Data
+            pull: {
+                batchSize: 60,
+                modifier: doc => doc // (optional) modify invalid data
+            },
+            push: {
+                batchSize: 60,
+                modifier: doc => doc // (optional) modify before sending
+            }
+        });
 
-        // // Observe replication states
-        // replicationState.error$.subscribe(err => {
-        //     console.error('Replication error:', err);
-        // });
-        // replicationState.awaitInitialReplication().then(() => {
-        //     console.log('Initial replication done');
-        // });
+        // Observe replication states
+        replicationState.error$.subscribe(err => {
+            console.error('Replication error:', err);
+        });
+        replicationState.awaitInitialReplication().then(() => {
+            console.log('Initial replication done');
+        });
     }
 
 
