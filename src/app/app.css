@@ -11,8 +11,17 @@
     border-radius: 10px;
 }
 
+#chat-log::-webkit-scrollbar-thumb {
+    background: #fee !important;
+    border-radius: 10px;
+}
+
 ::-webkit-scrollbar-thumb:hover {
     background: silver !important;
+}
+
+#chat-log::-webkit-scrollbar-thumb:hover {
+    background: pink !important;
 }
 
 :host {

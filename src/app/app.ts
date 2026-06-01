@@ -17,6 +17,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
 // Updated import to match new msgbox.ts which now exports a component instead of a service
 import { MessageBoxComponent } from '../modules/msgbox';
+import { PromptBoxComponent } from '../modules/promptbox';
 import { ConfirmBoxComponent } from '../modules/confirmbox';
 // @ts-ignore: Importing JS module without type definitions
 import appsData from '../data/apps.js';
@@ -100,7 +101,7 @@ const RXDB_SCHEMAS = {
     selector: 'app-root',
     standalone: true,
     // Import MsgBoxComponent (standalone) for displaying messages
-    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent],
+    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent, PromptBoxComponent],
     templateUrl: './app.html',
     styleUrl: './app.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -112,6 +113,7 @@ const RXDB_SCHEMAS = {
  * input fields 1 minute after the last password generation action.
  */
 export class App implements OnDestroy {
+    @ViewChild('promptBox') promptBox!: PromptBoxComponent;
     // Removed MessageService injection as msgbox now provides a component
     constructor(private cdr: ChangeDetectorRef) { }
     public CUR_MODEL = CURRENT_MODEL;
@@ -215,16 +217,38 @@ export class App implements OnDestroy {
     public getPinnedApps(): any[] {
         const stored = localStorage.getItem('pinnedApps');
         let ids: any[] = [];
+
         if (stored) {
             try {
                 ids = JSON.parse(stored);
                 if (!Array.isArray(ids)) ids = [];
-            } catch {
+            }
+            catch {
                 ids = [];
             }
         }
+
         // Match stored ids with app objects (assumes each app has a unique 'id' property)
-        return this.apps.filter((app: any) => ids.includes(app.id));
+        var pins = this.apps.filter((app: any) => ids.includes(app.id));
+        const custom = localStorage.getItem('customApps');
+        let customApps = [];
+
+        if (custom) {
+            try {
+                const parsed = JSON.parse(custom);
+
+                if (Array.isArray(parsed)) {
+                    customApps = parsed.map((app: any) => ({
+                        ...app,
+                        integrated: false,
+                        internal: false,
+                        custom: true,
+                        // other missing fields remain as is (null/undefined)
+                    }));
+                }
+            } catch { }
+        }
+        return pins.concat(customApps);
     }
 
     /**
@@ -407,7 +431,7 @@ export class App implements OnDestroy {
         try {
             const year: number = new Date().getFullYear();
             const docs = await this.db.chatMessages.find({ year }).exec();
-            let html = "Recent Messages: <br>";
+            let html = "<u>Recent Messages:</u> <br>";
             let count = 0;
 
             // Optionally clear previous entries except intro info
@@ -436,6 +460,32 @@ export class App implements OnDestroy {
         this.showApps.update(v => !v);
     }
 
+    // Add custom app using PromptBoxComponent
+    protected async addCustomApp(): Promise<void> {
+        this.toggleApps();
+        // this.cdr.detectChanges();
+        // await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Ask for app name
+        const name = await this.promptBox.showPrompt('App name:');
+        if (!name) return;
+
+        // Ask for URL
+        const url = await this.promptBox.showPrompt('URL:');
+        if (!url) return;
+        console.log('Custom app added:', name, url);
+
+        // Store custom apps in localStorage.customApps array
+        let customApps: any[] = [];
+        const stored = localStorage.getItem('customApps');
+
+        if (stored) {
+            try { customApps = JSON.parse(stored); } catch { customApps = []; }
+        }
+        // Create app object
+        customApps.push({ name, url });
+        localStorage.setItem('customApps', JSON.stringify(customApps));
+    }
     @ViewChild('chatLog', { static: false }) chatLogDiv!: ElementRef<HTMLDivElement>;
     @ViewChild(MatMenuTrigger) menuTrigger!: MatMenuTrigger;
     @ViewChild('fixedMenuTrigger') fixedMenuTrigger!: MatMenuTrigger;
@@ -713,7 +763,7 @@ export class App implements OnDestroy {
         // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
         if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
             const entry = document.createElement('div');
-            entry.innerHTML = `<b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
+            entry.innerHTML = `<h1 style="border-left:1px solid silver;">&nbsp;</h1><b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
             this.chatLogDiv.nativeElement.appendChild(entry);
             this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
         }

@@ -174,6 +174,7 @@
     style="position: fixed; top: 0; left: 0; width: 0; height: 0; opacity: 0; pointer-events: none;">
 </button>
 
+<!-- <prompt-box #promptBox></prompt-box> -->
 <!-- Apps overlay with backdrop -->
 @if (showApps()) {
 <div class="apps-backdrop" id="apps-backdrop" (click)="toggleApps()"></div>
@@ -184,7 +185,7 @@
 
     <h2 style="margin: 0.5rem 1rem; font-size: 1.2rem;">
         Pinned Apps
-        <button title="Add custom app">+</button>
+        <button id="btn-add-custom-app" title="Add custom app" (click)="addCustomApp()">+</button>
     </h2>
     <div id="pinned-app-list" class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
         <div *ngFor="let app of filteredPinned()" class="app-tile" title="Right-click for menu"
@@ -238,4 +239,5 @@
 
 <app-message-box #msgBox />
 <app-confirm-box #confirmBox />
+<app-prompt-box #promptBox></app-prompt-box>
 <router-outlet />

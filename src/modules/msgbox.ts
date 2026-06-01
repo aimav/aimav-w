@@ -18,7 +18,7 @@ var log = console.log;
         background: white; padding: 2rem; border-radius: 8px;
         text-align: left; min-width: 33vw;
       ">
-        <p [innerHTML]="message"></p>
+        <p [innerHTML]="message" style="overflow:auto; max-width:50vw; max-height:calc(100vh - 200px);"></p>
         <button (click)="show = false" style="width:100px; height:40px;">OK</button>
       </div>
     </div>
