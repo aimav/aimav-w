@@ -19,7 +19,7 @@ var log = console.log;
         text-align: left; min-width: 33vw;
       ">
         <p [innerHTML]="message" style="overflow:auto; max-width:50vw; max-height:calc(100vh - 200px);"></p>
-        <button (click)="show = false" style="width:100px; height:40px;">OK</button>
+        <button (click)="okClicked()" style="width:100px; height:40px;">OK</button>
       </div>
     </div>
   `
@@ -30,10 +30,30 @@ export class MessageBoxComponent {
     show = false;
     message: SafeHtml = '';
 
-    showMsg(msg: string) {
+    // Show a message box and return a Promise that resolves when the user clicks OK.
+    // This makes the component awaitable.
+    showMsg(msg: string): Promise<void> {
         log("show");
         this.message = this.sanitizer.bypassSecurityTrustHtml(msg);
         this.show = true;
         this.cdr.detectChanges();
+        // Return a promise that resolves on OK click
+        return new Promise<void>((resolve) => {
+            // Store resolver to be called from the OK button handler
+            this._resolve = resolve;
+        });
+    }
+
+    // Internal resolver for the current dialog instance
+    private _resolve?: () => void;
+
+    // Called when OK button is clicked
+    okClicked() {
+        this.show = false;
+        this.cdr.detectChanges();
+        if (this._resolve) {
+            this._resolve();
+            this._resolve = undefined;
+        }
     }
 }

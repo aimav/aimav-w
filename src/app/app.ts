@@ -1,5 +1,6 @@
 import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
+import { SelectBoxComponent } from '../modules/selectbox';
 
 import { createRxDatabase, addRxPlugin } from 'rxdb';
 import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
@@ -184,7 +185,7 @@ const RXDB_SCHEMAS = {
     selector: 'app-root',
     standalone: true,
     // Import MsgBoxComponent (standalone) for displaying messages
-    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent, PromptBoxComponent],
+    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent, PromptBoxComponent, SelectBoxComponent],
     templateUrl: './app.html',
     styleUrl: './app.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -212,9 +213,49 @@ export class App implements OnDestroy {
      * Handle alphabet button click.
      * @param letter The clicked letter.
      */
-    navigateLetter(letter: string): void {
+    async navigateLetter(letter: string): Promise<void> {
+        this.toggleApps();
         console.log('Letter clicked:', letter);
-        // Implement filtering or navigation based on the letter.
+        // Convert to lowercase for case‑insensitive match
+        const lower = letter.toLowerCase();
+
+        if (!this.db || !this.db.appCategories) {
+            console.error('RxDB not initialized or appCategories collection missing');
+            this.toggleApps();
+            return;
+        }
+        // Query categories where categoryName starts with the selected letter
+        const docs = await this.db.appCategories
+            .find({
+                selector: {
+                    categoryName: { $regex: '^' + lower, $options: 'i' }
+                },
+                limit: 100
+            })
+            .exec();
+        const options: { [key: string]: string } = {};
+
+        function uppercaseWords(str: string): string {
+            return str.replace(/\b\w/g, (char) => char.toUpperCase());
+        }
+        docs.forEach((doc: any) => {
+            const name = uppercaseWords(doc.categoryName as string);
+            options[name] = uppercaseWords(name);
+        });
+
+        if (Object.keys(options).length == 0) {
+            await this.msgBox.showMsg("No categories found");
+            this.toggleApps();
+            return;
+        }
+        else
+            if (this.selectBox) {
+                const selected = await this.selectBox.showOptions("Select category:", options);
+                log(selected)
+            }
+            else {
+                console.warn('SelectBoxComponent not available');
+            }
     }
 
     /**
@@ -226,6 +267,7 @@ export class App implements OnDestroy {
     }
 
     // Removed MessageService injection as msgbox now provides a component
+    @ViewChild(SelectBoxComponent) selectBox!: SelectBoxComponent;
     constructor(private cdr: ChangeDetectorRef) { }
     public CUR_MODEL = CURRENT_MODEL;
     protected readonly title = signal('aimav-w');
