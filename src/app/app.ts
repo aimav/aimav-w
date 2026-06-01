@@ -10,6 +10,9 @@ addRxPlugin(RxDBUpdatePlugin);
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
 addRxPlugin(RxDBMigrationSchemaPlugin);
 
+import { RxDBCleanupPlugin } from 'rxdb/plugins/cleanup';
+addRxPlugin(RxDBCleanupPlugin);
+
 // Create a singleton instance
 // const db = new AimavDB();
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
@@ -93,6 +96,30 @@ const RXDB_SCHEMAS = {
             },
             required: ['id', "tokens", 'year', "notes"],
             indexes: ["id", "tokens", "year"]
+        }
+    },
+    pinnedApps: {
+        schema: {
+            version: 0,
+            primaryKey: 'id',
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 },
+                tokens: { // Lite FTS to avoid filtering 'notes' array
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                name: { type: "string", maxLength: 100 },
+                url: { type: 'string', maxLength: 1000 },
+                icon: { type: 'string', maxLength: 1000 },
+                description: { type: 'string', maxLength: 1000 },
+                tags: { type: "array", items: { type: "string", maxLength: 100 } },
+                integrated: { type: "boolean" },
+                internal: { type: "boolean" },
+                custom: { type: "boolean" }
+            },
+            required: ['id', "tokens", 'name', "url"],
+            indexes: ["id", "tokens", "name", "url"]
         }
     }
 };
@@ -248,7 +275,27 @@ export class App implements OnDestroy {
                 }
             } catch { }
         }
-        return pins.concat(customApps);
+        var finalList = pins.concat(customApps);
+
+        for (let app of finalList)
+            if (app.id == null)
+                // @ts-ignore
+                app.id = window.new_id();
+
+        (async () => {
+            // Empty out the RxDB pinnedApps collection and repopulate it with the current list.
+            // This is done asynchronously and any errors are logged but do not block the return.
+            if (this.db && this.db.pinnedApps) {
+                // Remove all existing documents in the pinnedApps collection.
+                await this.db.pinnedApps.find().remove();
+                await this.db.pinnedApps.cleanup(0);
+
+                // Insert the updated list into the collection.
+                await this.db.pinnedApps.bulkInsert(finalList);
+            }
+        })();
+
+        return finalList;
     }
 
     /**
@@ -513,6 +560,7 @@ export class App implements OnDestroy {
         // Retrieve existing pinned apps from localStorage or initialize empty array
         const stored = localStorage.getItem('pinnedApps');
         let pinned: any[] = [];
+
         if (stored) {
             try {
                 pinned = JSON.parse(stored);
@@ -522,9 +570,10 @@ export class App implements OnDestroy {
             }
         }
         // Ensure the app has an identifier (use id property if present, otherwise the whole object)
-        const appId = app?.id ?? app;
+        const appId = app?.id ?? null;
+
         // Add if not already present
-        if (!pinned.includes(appId)) {
+        if (appId != null && !pinned.includes(appId)) {
             pinned.push(appId);
         }
         // Save back to localStorage
@@ -536,6 +585,7 @@ export class App implements OnDestroy {
         // Retrieve existing pinned apps from localStorage or initialize empty array
         const stored = localStorage.getItem('pinnedApps');
         let pinned: any[] = [];
+
         if (stored) {
             try {
                 pinned = JSON.parse(stored);
@@ -545,9 +595,10 @@ export class App implements OnDestroy {
             }
         }
         // Determine the identifier used for the app (same logic as pinApp)
-        const appId = app?.id ?? app;
+        const appId = app?.id ?? null;
         // Remove the appId if present
         const index = pinned.indexOf(appId);
+
         if (index !== -1) {
             pinned.splice(index, 1);
         }
