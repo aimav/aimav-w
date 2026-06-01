@@ -603,7 +603,10 @@ export class App implements OnDestroy {
         }
         try {
             const year: number = new Date().getFullYear();
-            const docs = await this.db.chatMessages.find({ year }).exec();
+            const docs = await this.db.chatMessages.find({
+                selector: { year: year },
+                index: ['year']
+            }).exec();
             let html = "<u>Recent Messages:</u> <br>";
             let count = 0;
 
