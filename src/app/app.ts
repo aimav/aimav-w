@@ -976,7 +976,9 @@ export class App implements OnDestroy {
             };
 
             // Attempt to fetch an existing year record using RxDB query
-            const existingDoc = await this.db.chatMessages.findOne({ year: currentYear }).exec();
+            const existingDoc = await this.db.chatMessages.findOne({
+                selector: { year: currentYear }
+            }).exec();
 
             if (existingDoc) {
                 const msgs = existingDoc.get('messages') as any[];
