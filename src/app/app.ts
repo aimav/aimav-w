@@ -208,7 +208,29 @@ export class App implements OnDestroy {
      */
     navigateHome(): void {
         console.log('Home button clicked');
-        // Implement actual navigation logic as needed, e.g., routing to '/'
+        // Hide the category app list and its heading
+        const catList = document.getElementById('cat-app-list');
+        const catHeading = document.getElementById('cat-app-list-heading');
+        if (catList) catList.style.display = 'none';
+        if (catHeading) catHeading.style.display = 'none';
+
+        // Show pinned apps list and heading
+        const pinnedList = document.getElementById('pinned-app-list');
+        const pinnedHeading = document.getElementById('pinned-app-list-heading');
+        if (pinnedList) pinnedList.style.display = 'flex';
+        if (pinnedHeading) pinnedHeading.style.display = '';
+
+        // Show all apps list and heading
+        const allApps = document.getElementById('all-app-list');
+        const allAppsHeading = document.getElementById('all-app-list-heading');
+        if (allApps) allApps.style.display = 'flex';
+        if (allAppsHeading) allAppsHeading.style.display = '';
+
+        // Show all extensions list and heading
+        const allExt = document.getElementById('all-ext-list');
+        const allExtHeading = document.getElementById('all-ext-list-heading');
+        if (allExt) allExt.style.display = 'flex';
+        if (allExtHeading) allExtHeading.style.display = '';
     }
 
     /**
@@ -240,7 +262,7 @@ export class App implements OnDestroy {
         }
         docs.forEach((doc: any) => {
             const name = uppercaseWords(doc.categoryName as string);
-            options[name] = uppercaseWords(name);
+            options[name.toLowerCase()] = uppercaseWords(name);
         });
 
         if (Object.keys(options).length == 0) {
@@ -251,8 +273,42 @@ export class App implements OnDestroy {
         else
             if (this.selectBox) {
                 this.toggleApps();
-                const selected = await this.selectBox.showOptions("Select category:", options);
-                log(selected)
+                const selectedCategory = await this.selectBox.showOptions("Select category:", options);
+                // Store the selected category name for UI display (non‑null after the guard above)
+                this.selectedCategory = uppercaseWords(selectedCategory as string);
+                log(selectedCategory);
+
+                if (!selectedCategory) {
+                    this.toggleApps();
+                    return;
+                }
+                // Show apps in the selected category
+                // Find the category document where categoryName matches the selectedCategory
+                try {
+                    const catDoc = await this.db.appCategories
+                        .findOne({
+                            selector: {
+                                categoryName: { $eq: selectedCategory }
+                            }
+                        })
+                        .exec();
+                    if (catDoc && catDoc.apps) {
+                        // Update the appsInCategory signal with the apps from the category
+                        // Ensure apps are sorted for consistent display
+                        this.appsInCategory.set(this.sortApps(catDoc.apps));
+                        // Also update the filtered signal used by the UI
+                        this.filteredCatApps.set(this.sortApps(catDoc.apps));
+                    } else {
+                        // Use info toast as warning alternative
+                        this.toast.info(`No apps found for category ${selectedCategory}`);
+                    }
+                } catch (e) {
+                    console.error('Error fetching apps for category', e);
+                    // Use info toast as fallback for error messages
+                    this.toast.info('Failed to load apps for selected category');
+                }
+                // Keep the apps overlay open to display the category apps
+                this.toggleApps();
             }
             else {
                 console.warn('SelectBoxComponent not available');
@@ -272,6 +328,8 @@ export class App implements OnDestroy {
     constructor(private cdr: ChangeDetectorRef, private toast: NgToastService) { }
     public CUR_MODEL = CURRENT_MODEL;
     protected readonly title = signal('aimav-w');
+    // Currently selected category name (used in the UI header)
+    public selectedCategory: string = '';
 
     /** Current value of the username input box. */
     protected username = signal('');
@@ -307,9 +365,13 @@ export class App implements OnDestroy {
     // List of extensions for the overlay
     public extensions = extensionsData;
     // Filtered lists used for display based on the filter input
-    public filteredApps = signal(this.sortApps(this.apps));
-    public filteredExtensions = signal(this.extensions);
-    public filteredPinned = signal(this.sortApps(this.getPinnedApps()));
+    public filteredApps = signal<any[]>(this.sortApps(this.apps));
+    public filteredExtensions = signal<any[]>(this.extensions);
+    public filteredPinned = signal<any[]>(this.sortApps(this.getPinnedApps()));
+    // Signal holding apps for the selected category (typed to any[] to avoid "never" inference)
+    public appsInCategory = signal<any[]>([]);
+    // Filtered view of category apps (typed to any[])
+    public filteredCatApps = signal<any[]>([]);
 
     handleAppFilterKeyup(event: KeyboardEvent) {
         // Prevent default form/button behaviour just in case
@@ -639,6 +701,8 @@ export class App implements OnDestroy {
 
     // Add custom app using PromptBoxComponent
     protected async addCustomApp(): Promise<void> {
+        // Keep the apps overlay open to display the category apps
+        // (toggleApps was called earlier to close, now reopen)
         this.toggleApps();
         // this.cdr.detectChanges();
         // await new Promise(resolve => setTimeout(resolve, 0));
