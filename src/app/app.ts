@@ -16,6 +16,10 @@ addRxPlugin(RxDBCleanupPlugin);
 import { RxDBLeaderElectionPlugin } from 'rxdb/plugins/leader-election';
 addRxPlugin(RxDBLeaderElectionPlugin);
 
+import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
+addRxPlugin(RxDBDevModePlugin);
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+
 // Create a singleton instance
 // const db = new AimavDB();
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
@@ -43,8 +47,11 @@ const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.goog
 
 const RXDB_SCHEMAS = {
     chatMessages: {
+        migrationStrategies: {
+            // 1: (d: any) => d
+        },
         schema: {
-            version: 1,
+            version: 0,
             primaryKey: 'id', // FIELD
             type: 'object',
             properties: {
@@ -53,7 +60,7 @@ const RXDB_SCHEMAS = {
                     type: "array",
                     items: { type: "string", maxLength: 100 }
                 },
-                year: { type: 'number' }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
                 messages: { // FIELD
                     type: 'array',
                     items: {
@@ -61,17 +68,20 @@ const RXDB_SCHEMAS = {
                         properties: {
                             idstr: { type: 'string', maxLength: 100 }, // FIELD
                             content: { type: 'string', maxLength: 1000 }, // FIELD
-                            timestamp: { type: "number" } // FIELD
+                            timestamp: { type: "number", "multipleOf": 1 } // FIELD
                         },
                         required: ['idstr', 'content', 'timestamp'],
                     }
                 },
             },
-            required: ['id', "tokens", 'year', "messages"],
-            indexes: ["id", "tokens", "year"]
+            required: ['year'],
+            indexes: ["year"]
         }
     },
     notes: {
+        migrationStrategies: {
+            // 1: (d: any) => d
+        },
         schema: {
             version: 0,
             primaryKey: 'id',
@@ -82,7 +92,7 @@ const RXDB_SCHEMAS = {
                     type: "array",
                     items: { type: "string", maxLength: 100 }
                 },
-                year: { type: 'number' }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
                 notes: {
                     type: 'array',
                     items: {
@@ -91,17 +101,20 @@ const RXDB_SCHEMAS = {
                             idstr: { type: 'string', maxLength: 100 },
                             title: { type: "string", maxLength: 1000 },
                             content: { type: 'string', maxLength: 10000 },
-                            timestamp: { type: "number" }
+                            timestamp: { type: "number", "multipleOf": 1 }
                         },
                         required: ['idstr', "title", 'content', 'timestamp'],
                     }
                 },
             },
-            required: ['id', "tokens", 'year', "notes"],
-            indexes: ["id", "tokens", "year"]
+            required: ['year'],
+            indexes: ["year"]
         }
     },
     pinnedApps: {
+        migrationStrategies: {
+            // 1: (d: any) => d
+        },
         schema: {
             version: 0,
             primaryKey: 'id',
@@ -121,8 +134,40 @@ const RXDB_SCHEMAS = {
                 internal: { type: "boolean" },
                 custom: { type: "boolean" }
             },
-            required: ['id', "tokens", 'name', "url"],
-            indexes: ["id", "tokens", "name", "url"]
+            required: ['name', "url"],
+            indexes: ["name", "url"]
+        }
+    },
+    appCategories: {
+        migrationStrategies: {
+            // 1: (d: any) => d
+        },
+        schema: {
+            version: 0,
+            primaryKey: 'id',
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 },
+                tokens: { // Lite FTS to avoid filtering 'apps' array
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                categoryName: { type: 'string', maxLength: 500 }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                apps: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            idstr: { type: 'string', maxLength: 100 },
+                            name: { type: "string", maxLength: 1000 },
+                            url: { type: 'string', maxLength: 10000 }
+                        },
+                        required: ['idstr', "name", 'url'],
+                    }
+                },
+            },
+            required: ['categoryName'],
+            indexes: ["categoryName"]
         }
     }
 };
@@ -432,7 +477,7 @@ export class App implements OnDestroy {
                 "click Sync Data to authenticate with Google Drive.");
             return;
         }
-        var stores = ["chatMessages", "notes"];
+        var stores = Object.keys(RXDB_SCHEMAS);
 
         for (let store of stores) {
             log("Synchronising " + store);
@@ -518,11 +563,19 @@ export class App implements OnDestroy {
 
         // Ask for app name
         const name = await this.promptBox.showPrompt('Enter custom app name:');
-        if (!name) return;
+
+        if (!name) {
+            this.toggleApps();
+            return;
+        }
 
         // Ask for URL
         const url = await this.promptBox.showPrompt('Enter custom app URL:');
-        if (!url) return;
+
+        if (!url) {
+            this.toggleApps();
+            return;
+        }
         // console.log('Custom app added:', name, url);
 
         // Store custom apps in localStorage.customApps array
@@ -535,7 +588,57 @@ export class App implements OnDestroy {
         // Create app object
         customApps.push({ name, url });
         localStorage.setItem('customApps', JSON.stringify(customApps));
+        this.toggleApps();
     }
+
+    protected async addToCategory(app: any): Promise<void> {
+        this.toggleApps();
+        // Ask user for category name using PromptBoxComponent
+        var categoryName = await this.promptBox.showPrompt('Enter category name:');
+
+        if (!categoryName) {
+            // user cancelled
+            this.toggleApps();
+            return;
+        }
+        if (!this.db || !this.db.appCategories) {
+            console.error('RxDB not initialized or appCategories collection missing');
+            log("db:", this.db);
+            log("appCategories:", this.db.appCategories);
+            this.toggleApps();
+            return;
+        }
+        categoryName = categoryName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
+
+        // Find existing category document
+        const existing = await this.db.appCategories.findOne({ selector: { categoryName } }).exec();
+        const appInfo = { idstr: app.id, name: app.name, url: app.url };
+
+        if (existing) {
+            // Update existing category – add app if not already present
+            const already = existing.apps.find((a: any) => a.idstr === app.id);
+
+            if (!already) {
+                existing.apps.push(appInfo);
+                // Update tokens for search (simple tokenization)
+                existing.tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
+                await existing.save();
+            }
+        }
+        else {
+            // Create new category document
+            const id = (window as any).new_id ? (window as any).new_id() : `${Date.now()}`;
+            const tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
+            await this.db.appCategories.insert({
+                id,
+                categoryName,
+                tokens,
+                apps: [appInfo]
+            });
+        }
+        this.toggleApps();
+    }
+
     @ViewChild('chatLog', { static: false }) chatLogDiv!: ElementRef<HTMLDivElement>;
     @ViewChild(MatMenuTrigger) menuTrigger!: MatMenuTrigger;
     @ViewChild('fixedMenuTrigger') fixedMenuTrigger!: MatMenuTrigger;
@@ -768,6 +871,11 @@ export class App implements OnDestroy {
     // RxDB instance holder (initialized in ngOnInit)
     // (declaration moved to end of class)
 
+    tokenize(str: string) {
+        const tokens = this.normalise(str).split(' ');
+        return tokens.filter(t => t.length > 0);
+    }
+
     public async sendMessage(ev: Event) {
         ev.preventDefault();
         const message = this.chatInput();
@@ -960,10 +1068,13 @@ export class App implements OnDestroy {
         // Sort apps: internal apps first, then alphabetically by name
         this.apps = this.sortApps(this.apps);
 
+        const storageWithValidation = wrappedValidateAjvStorage({
+            storage: getRxStorageDexie()
+        });
         // Initialise RxDB and store the instance on the component for later use
         this.db = await createRxDatabase({
             name: 'aimav',
-            storage: getRxStorageDexie(),
+            storage: storageWithValidation
         });
 
         await this.db.addCollections(RXDB_SCHEMAS);

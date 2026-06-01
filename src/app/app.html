@@ -77,7 +77,8 @@
                 Missions
                 <ul>
                     <li>To be the start page for everything web with AI operate on apps data.</li>
-                    <li>Access: Auth first, UI: AI first then Apps</li>
+                    <li>Access: Auth first, UI: AI first then Apps, the Make: All done with vibing & free libs
+                    </li>
                 </ul>
                 This is your workspace for both personal use and for other use-cases at work,
                 with authentication tool to generate access info to things you own.
@@ -165,6 +166,7 @@
 <!-- Context menu for app tiles -->
 <mat-menu #appMenu="matMenu">
     <button mat-menu-item (click)="openApp(_contextApp)">Open</button>
+    <button mat-menu-item (click)="addToCategory(_contextApp)">Add to Category</button>
     <button mat-menu-item (click)="pinApp(_contextApp)">Pin to Top</button>
     <button mat-menu-item (click)="unpinApp(_contextApp)">Unpin</button>
 </mat-menu>
