@@ -57,6 +57,8 @@ const RXDB_SCHEMAS = {
             properties: {
                 id: { type: 'string', maxLength: 100 }, // FIELD
                 tokens: { // Lite FTS to avoid filtering 'messages' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
                     type: "array",
                     items: { type: "string", maxLength: 100 }
                 },
@@ -89,6 +91,8 @@ const RXDB_SCHEMAS = {
             properties: {
                 id: { type: 'string', maxLength: 100 },
                 tokens: { // Lite FTS to avoid filtering 'notes' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
                     type: "array",
                     items: { type: "string", maxLength: 100 }
                 },
@@ -122,6 +126,8 @@ const RXDB_SCHEMAS = {
             properties: {
                 id: { type: 'string', maxLength: 100 },
                 tokens: { // Lite FTS to avoid filtering 'notes' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
                     type: "array",
                     items: { type: "string", maxLength: 100 }
                 },
@@ -149,6 +155,8 @@ const RXDB_SCHEMAS = {
             properties: {
                 id: { type: 'string', maxLength: 100 },
                 tokens: { // Lite FTS to avoid filtering 'apps' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
                     type: "array",
                     items: { type: "string", maxLength: 100 }
                 },
