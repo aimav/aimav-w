@@ -77,8 +77,9 @@
                 <h1>Welcome to Aimav!</h1>
                 Missions
                 <ul>
-                    <li>To be the start page for everything web with AI operate on apps data.</li>
-                    <li>Access: Auth first, UI: AI first then Apps, the Make: All done with vibing & free libs
+                    <li>To be the <u>start page for everything</u> web with <u>AI operate on apps data</u>.</li>
+                    <li>Access: <u>Auth</u> first, UI: <u>AI</u> first then <u>Apps</u>, the Make: <u>All done with
+                            vibing & free libs</u>.
                     </li>
                 </ul>
                 This is your workspace for both personal use and for other use-cases at work,
@@ -252,6 +253,10 @@
     </div>
 </div>
 }
+
+<!-- Toast container for ng-angular-popup notifications -->
+<!-- https://www.npmjs.com/package/ng-angular-popup -->
+<ng-toast [position]="TOAST_POSITIONS.BOTTOM_CENTER" [width]="350"></ng-toast>
 
 <app-message-box #msgBox />
 <app-confirm-box #confirmBox />

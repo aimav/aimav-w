@@ -26,6 +26,7 @@ import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
 import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
+import { NgToastModule, NgToastService, TOAST_POSITIONS } from 'ng-angular-popup';
 // Updated import to match new msgbox.ts which now exports a component instead of a service
 import { MessageBoxComponent } from '../modules/msgbox';
 import { PromptBoxComponent } from '../modules/promptbox';
@@ -185,7 +186,7 @@ const RXDB_SCHEMAS = {
     selector: 'app-root',
     standalone: true,
     // Import MsgBoxComponent (standalone) for displaying messages
-    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent, PromptBoxComponent, SelectBoxComponent],
+    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent, PromptBoxComponent, SelectBoxComponent, NgToastModule],
     templateUrl: './app.html',
     styleUrl: './app.css',
     changeDetection: ChangeDetectionStrategy.OnPush
@@ -197,6 +198,7 @@ const RXDB_SCHEMAS = {
  * input fields 1 minute after the last password generation action.
  */
 export class App implements OnDestroy {
+    TOAST_POSITIONS = TOAST_POSITIONS;
     @ViewChild('promptBox') promptBox!: PromptBoxComponent;
     // Alphabet array for navigation buttons
     alphabet: string[] = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
@@ -214,14 +216,12 @@ export class App implements OnDestroy {
      * @param letter The clicked letter.
      */
     async navigateLetter(letter: string): Promise<void> {
-        this.toggleApps();
         console.log('Letter clicked:', letter);
         // Convert to lowercase for case‑insensitive match
         const lower = letter.toLowerCase();
 
         if (!this.db || !this.db.appCategories) {
             console.error('RxDB not initialized or appCategories collection missing');
-            this.toggleApps();
             return;
         }
         // Query categories where categoryName starts with the selected letter
@@ -244,12 +244,13 @@ export class App implements OnDestroy {
         });
 
         if (Object.keys(options).length == 0) {
-            await this.msgBox.showMsg("No categories found");
-            this.toggleApps();
+            // await this.msgBox.showMsg("No categories found");
+            this.toast.info(`Letter ${letter.toUpperCase()}: No categories found`);
             return;
         }
         else
             if (this.selectBox) {
+                this.toggleApps();
                 const selected = await this.selectBox.showOptions("Select category:", options);
                 log(selected)
             }
@@ -268,7 +269,7 @@ export class App implements OnDestroy {
 
     // Removed MessageService injection as msgbox now provides a component
     @ViewChild(SelectBoxComponent) selectBox!: SelectBoxComponent;
-    constructor(private cdr: ChangeDetectorRef) { }
+    constructor(private cdr: ChangeDetectorRef, private toast: NgToastService) { }
     public CUR_MODEL = CURRENT_MODEL;
     protected readonly title = signal('aimav-w');
 
@@ -559,7 +560,7 @@ export class App implements OnDestroy {
 
         for (let store of stores) {
             log("Synchronising " + store);
-            new Notification("Synchronising " + store);
+            this.toast.info("Synchronising " + store);
             const replicationState = await replicateGoogleDrive({
                 replicationIdentifier: `aimav-${store}`,
                 collection: this.db[store], // RxCollection
@@ -586,7 +587,7 @@ export class App implements OnDestroy {
             });
             await replicationState.awaitInitialReplication();
         }
-        new Notification("Synchronization completed");
+        this.toast.success("Synchronization completed");
     }
 
 
@@ -1147,6 +1148,12 @@ export class App implements OnDestroy {
     }
 
     public async ngOnInit(): Promise<void> {
+        await Notification.requestPermission();
+        // Show a toast notification on app initialization at bottom right
+        // Show a toast notification on app initialization
+        // Using NgToastService to show a simple success toast on init
+        // The service's success method accepts a string message.
+        this.toast.success('App initialized');
         log("Apps data:", this.apps);
         // Sort apps: internal apps first, then alphabetically by name
         this.apps = this.sortApps(this.apps);
