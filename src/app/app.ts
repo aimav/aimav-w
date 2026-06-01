@@ -197,6 +197,34 @@ const RXDB_SCHEMAS = {
  */
 export class App implements OnDestroy {
     @ViewChild('promptBox') promptBox!: PromptBoxComponent;
+    // Alphabet array for navigation buttons
+    alphabet: string[] = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+
+    /**
+     * Navigate to home view.
+     */
+    navigateHome(): void {
+        console.log('Home button clicked');
+        // Implement actual navigation logic as needed, e.g., routing to '/'
+    }
+
+    /**
+     * Handle alphabet button click.
+     * @param letter The clicked letter.
+     */
+    navigateLetter(letter: string): void {
+        console.log('Letter clicked:', letter);
+        // Implement filtering or navigation based on the letter.
+    }
+
+    /**
+     * Handle Others button click.
+     */
+    navigateOther(): void {
+        console.log('Others button clicked');
+        // Implement navigation for other items.
+    }
+
     // Removed MessageService injection as msgbox now provides a component
     constructor(private cdr: ChangeDetectorRef) { }
     public CUR_MODEL = CURRENT_MODEL;

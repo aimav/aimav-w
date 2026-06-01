@@ -181,6 +181,17 @@
 @if (showApps()) {
 <div class="apps-backdrop" id="apps-backdrop" (click)="toggleApps()"></div>
 <div class="apps-overlay" id="apps-overlay">
+    <!-- Fixed navigation buttons added below apps overlay -->
+    <div class="app-nav-buttons"
+        style="position:static; top:10px; left:10px; z-index:1000; background:rgba(255,255,255,0.9); padding:5px; border-radius:5px; text-align: center;">
+        <button class="nav-btn" style="margin:2px;" (click)="navigateHome()">Home</button>
+        <!-- Alphabet buttons -->
+        <ng-container *ngFor="let letter of alphabet">
+            <button class="nav-btn" style="margin:2px;" (click)="navigateLetter(letter)">{{letter}}</button>
+        </ng-container>
+        <button class="nav-btn" style="margin:2px;" (click)="navigateOther()">Others</button>
+    </div>
+
     <!-- Pinned Apps list -->
     <input type="text" id="app-filter" class="app-filter" placeholder="Filter apps and extensions..."
         onclick="this.value='';" (keyup)="handleAppFilterKeyup($event)" />
