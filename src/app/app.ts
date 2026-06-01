@@ -13,6 +13,9 @@ addRxPlugin(RxDBMigrationSchemaPlugin);
 import { RxDBCleanupPlugin } from 'rxdb/plugins/cleanup';
 addRxPlugin(RxDBCleanupPlugin);
 
+import { RxDBLeaderElectionPlugin } from 'rxdb/plugins/leader-election';
+addRxPlugin(RxDBLeaderElectionPlugin);
+
 // Create a singleton instance
 // const db = new AimavDB();
 import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
