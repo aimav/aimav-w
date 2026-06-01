@@ -759,16 +759,21 @@ export class App implements OnDestroy {
         // Find existing category document
         const existing = await this.db.appCategories.findOne({ selector: { categoryName } }).exec();
         const appInfo = { idstr: app.id, name: app.name, url: app.url };
+        log(existing)
 
         if (existing) {
             // Update existing category – add app if not already present
             const already = existing.apps.find((a: any) => a.idstr === app.id);
 
             if (!already) {
-                existing.apps.push(appInfo);
+                // existing.apps.push(appInfo);
+                await existing.patch({
+                    apps: [...existing.apps, appInfo]
+                });
+
                 // Update tokens for search (simple tokenization)
-                existing.tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
-                await existing.save();
+                // existing.tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
+                // await existing.save();
             }
         }
         else {
