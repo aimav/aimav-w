@@ -467,13 +467,13 @@ export class App implements OnDestroy {
         // await new Promise(resolve => setTimeout(resolve, 0));
 
         // Ask for app name
-        const name = await this.promptBox.showPrompt('App name:');
+        const name = await this.promptBox.showPrompt('Enter custom app name:');
         if (!name) return;
 
         // Ask for URL
-        const url = await this.promptBox.showPrompt('URL:');
+        const url = await this.promptBox.showPrompt('Enter custom app URL:');
         if (!url) return;
-        console.log('Custom app added:', name, url);
+        // console.log('Custom app added:', name, url);
 
         // Store custom apps in localStorage.customApps array
         let customApps: any[] = [];
