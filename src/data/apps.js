@@ -3,7 +3,7 @@ export default [{
     icon: "https://www.google.com/s2/favicons?sz=256&domain_url=logseq.com",
     description: "Graph-based notebook",
     id: "aimav.github.io/notebook",
-    url: "/apps/logseq-lf",
+    url: "/apps/logseq-lf/#/graphs",
     tags: ["utility", "tool", "notes", "note-taking", "data", "graph"],
     integrated: true,
     internal: true
