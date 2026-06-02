@@ -199,10 +199,12 @@
         onclick="this.value='';" (keyup)="handleAppFilterKeyup($event)" />
 
     <!-- Apps in category -->
-    <h2 id="cat-app-list-heading" class="app-list-heading" style="margin: 0.5rem 1rem; font-size: 1.2rem;">
+    <h2 id="cat-app-list-heading" class="app-list-heading" style="margin: 0.5rem 1rem; font-size: 1.2rem;"
+        *ngIf="selectedCategory && selectedCategory.trim()">
         {{selectedCategory}}
     </h2>
-    <div id="cat-app-list" class="apps-list" style="display:flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+    <div id="cat-app-list" class="apps-list" style="display:flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;"
+        *ngIf="selectedCategory && selectedCategory.trim()">
         <div *ngFor="let app of filteredCatApps()" class="app-tile" title="Right-click for menu"
             (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center; position: relative;">
             <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">

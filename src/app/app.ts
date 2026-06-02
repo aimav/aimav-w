@@ -148,10 +148,10 @@ const RXDB_SCHEMAS = {
     },
     appCategories: {
         migrationStrategies: {
-            // 1: (d: any) => d
+            1: (d: any) => d
         },
         schema: {
-            version: 0,
+            version: 1,
             primaryKey: 'id',
             type: 'object',
             properties: {
@@ -170,7 +170,8 @@ const RXDB_SCHEMAS = {
                         properties: {
                             idstr: { type: 'string', maxLength: 100 },
                             name: { type: "string", maxLength: 1000 },
-                            url: { type: 'string', maxLength: 10000 }
+                            url: { type: 'string', maxLength: 10000 },
+                            icon: { type: 'string', maxLength: 1000 }
                         },
                         required: ['idstr', "name", 'url'],
                     }
@@ -208,6 +209,9 @@ export class App implements OnDestroy {
      */
     navigateHome(): void {
         console.log('Home button clicked');
+        this.selectedCategory = '';
+        this.appsInCategory.set([]);
+
         // Hide the category app list and its heading
         const catList = document.getElementById('cat-app-list');
         const catHeading = document.getElementById('cat-app-list-heading');
@@ -744,6 +748,49 @@ export class App implements OnDestroy {
     }
 
     async removeFromCategory(app: any): Promise<void> {
+        // Ensure a category is selected
+        if (!this.selectedCategory || this.selectedCategory.trim() === "") {
+            this.toast.info("No category selected");
+            return;
+        }
+        // Stored as lowercase with single spaces in db
+        var selectedCategory = this.selectedCategory.toLocaleLowerCase().trim()
+            .replace(/[\s]{2,}/g, '\x20');
+
+        if (!this.db || !this.db.appCategories) {
+            console.error('RxDB not initialized or appCategories collection missing');
+            this.toast.info('Database not ready');
+            return;
+        }
+
+        // Find the category document matching the selected category name
+        const catDoc = await this.db.appCategories
+            .findOne({ selector: { categoryName: { $eq: selectedCategory } } })
+            .exec();
+
+        if (!catDoc) {
+            this.toast.info(`Category ${selectedCategory} not found`);
+            return;
+        }
+
+        if (!catDoc.apps || catDoc.apps.length === 0) {
+            this.toast.info(`No apps in category ${selectedCategory}`);
+            return;
+        }
+
+        // Find index of app with matching URL
+        const index = catDoc.apps.findIndex((a: any) => a.url === app.url);
+
+        if (index === -1) {
+            this.toast.info('App not found in selected category');
+            return;
+        }
+
+        // Remove the app from the array and patch the document
+        const newApps = catDoc.apps.slice();
+        newApps.splice(index, 1);
+        await catDoc.patch({ apps: newApps });
+        this.toast.info(`Removed app from ${selectedCategory}`);
     }
 
     protected async addToCategory(app: any): Promise<void> {
@@ -767,7 +814,7 @@ export class App implements OnDestroy {
 
         // Find existing category document
         const existing = await this.db.appCategories.findOne({ selector: { categoryName } }).exec();
-        const appInfo = { idstr: app.id, name: app.name, url: app.url };
+        const appInfo = { idstr: app.id, name: app.name, url: app.url, icon: app.icon };
         log(existing)
 
         if (existing) {
@@ -1231,7 +1278,7 @@ export class App implements OnDestroy {
         // Show a toast notification on app initialization
         // Using NgToastService to show a simple success toast on init
         // The service's success method accepts a string message.
-        this.toast.success('App initialized');
+        // this.toast.success('App initialized');
         log("Apps data:", this.apps);
         // Sort apps: internal apps first, then alphabetically by name
         this.apps = this.sortApps(this.apps);
