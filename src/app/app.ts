@@ -262,7 +262,8 @@ export class App implements OnDestroy {
         const options: { [key: string]: string } = {};
 
         function uppercaseWords(str: string): string {
-            return str.replace(/\b\w/g, (char) => char.toUpperCase());
+            return str.replace(/\b\w/g, (char) => char.toUpperCase()).trim()
+                .replace(/[\s]{2,}/g, '\x20');
         }
         docs.forEach((doc: any) => {
             const name = uppercaseWords(doc.categoryName as string);
@@ -793,6 +794,96 @@ export class App implements OnDestroy {
         this.toast.info(`Removed app from ${selectedCategory}`);
     }
 
+    /**
+     * Prompt the user to edit the currently selected category name.
+     * Uses PromptBoxComponent to get the new name, defaulting to the current name.
+     * Updates the category document in the appCategories collection, storing the
+     * name in lowercase (as used throughout the database queries).
+     */
+    async editCategory(): Promise<void> {
+        // Ensure a category is selected
+        if (!this.selectedCategory || this.selectedCategory.trim() === "") {
+            this.toast.info("No category selected");
+            return;
+        }
+        this.toggleApps();
+
+        // Prompt for new name, default to current displayed name
+        const newName = await this.promptBox.showPrompt('Edit category name:', this.selectedCategory);
+
+        if (!newName) {
+            // User cancelled or entered empty string
+            this.toggleApps();
+            return;
+        }
+
+        // Normalise the name for storage (lowercase, single spaces)
+        const normalized = newName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
+
+        // Find the existing category document
+        const catDoc = await this.db.appCategories
+            .findOne({
+                selector: {
+                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
+                }
+            })
+            .exec();
+
+        if (!catDoc) {
+            this.toast.info(`Category ${this.selectedCategory} not found`);
+            this.toggleApps();
+            return;
+        }
+
+        // Update the categoryName field
+        await catDoc.patch({ categoryName: normalized });
+        // Update UI state
+        this.selectedCategory = newName;
+        this.toast.success('Category name updated');
+        this.toggleApps();
+    }
+
+    async delCategory(): Promise<void> {
+        // Ensure a category is selected
+        if (!this.selectedCategory || this.selectedCategory.trim() === "") {
+            this.toast.info("No category selected");
+            return;
+        }
+        this.toggleApps();
+
+        // Ask for confirm
+        const confirm = await this.confirmBox.showConfirm('Sure to delete category: '
+            + this.selectedCategory + "?");
+
+        if (confirm != "yes") {
+            // User cancelled or entered empty string
+            this.toggleApps();
+            return;
+        }
+
+        // Find the existing category document
+        const catDoc = await this.db.appCategories
+            .findOne({
+                selector: {
+                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
+                }
+            })
+            .exec();
+
+        if (!catDoc) {
+            this.toast.info(`Category ${this.selectedCategory} not found`);
+            this.toggleApps();
+            return;
+        }
+
+        // Del
+        await catDoc.remove();
+        // Update UI state
+        this.selectedCategory = "";
+        this.toast.success('Category deleted');
+        this.toggleApps();
+    }
+
     protected async addToCategory(app: any): Promise<void> {
         this.toggleApps();
         // Ask user for category name using PromptBoxComponent
@@ -816,6 +907,10 @@ export class App implements OnDestroy {
         const existing = await this.db.appCategories.findOne({ selector: { categoryName } }).exec();
         const appInfo = { idstr: app.id, name: app.name, url: app.url, icon: app.icon };
         log(existing)
+        log(appInfo)
+
+        if (appInfo.icon == null)
+            appInfo.icon = "https://www.google.com/s2/favicons?sz=256&domain_url=" + appInfo.url;
 
         if (existing) {
             // Update existing category – add app if not already present

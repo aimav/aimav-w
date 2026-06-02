@@ -188,7 +188,7 @@
     <!-- Fixed navigation buttons added below apps overlay -->
     <div class="app-nav-buttons"
         style="position:static; top:10px; left:10px; z-index:1000; background:rgba(255,255,255,0.9); padding:5px; border-radius:5px; text-align: center;">
-        <button class="nav-btn" style="margin:2px;" (click)="navigateHome()">Home</button>
+        <button class="nav-btn" style="margin:2px;" (click)="navigateHome()">🏠Home</button>
         <!-- Alphabet buttons -->
         <ng-container *ngFor="let letter of alphabet">
             <button class="nav-btn" style="margin:2px;" (click)="navigateLetter(letter)">{{letter}}</button>
@@ -202,6 +202,8 @@
     <h2 id="cat-app-list-heading" class="app-list-heading" style="margin: 0.5rem 1rem; font-size: 1.2rem;"
         *ngIf="selectedCategory && selectedCategory.trim()">
         {{selectedCategory}}
+        <span id="edit-category" title="Edit Category" style="cursor:pointer;" (click)="editCategory()">📝</span>
+        <span id="del-category" title="Delete Category" (click)="delCategory()" style="cursor:pointer;">❌</span>
     </h2>
     <div id="cat-app-list" class="apps-list" style="display:flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;"
         *ngIf="selectedCategory && selectedCategory.trim()">

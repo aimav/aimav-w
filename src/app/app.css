@@ -24,6 +24,10 @@
     background: pink !important;
 }
 
+.app-nav-buttons button {
+    height:25px; vertical-align: bottom;;
+}
+
 :host {
     display: block;
     width: 100vw;
