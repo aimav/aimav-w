@@ -884,15 +884,52 @@ export class App implements OnDestroy {
         this.toggleApps();
     }
 
+    uppercaseWords(str: string): string {
+        return str.replace(/\b\w/g, (char) => char.toUpperCase()).trim()
+            .replace(/[\s]{2,}/g, '\x20');
+    }
+
     protected async addToCategory(app: any): Promise<void> {
         this.toggleApps();
-        // Ask user for category name using PromptBoxComponent
-        var categoryName = await this.promptBox.showPrompt('Enter category name:');
+        // Ask user whether to add to an existing category or create a new one
+        const useExisting = await this.confirmBox.showConfirm('Add to existing category?');
 
-        if (!categoryName) {
-            // user cancelled
-            this.toggleApps();
-            return;
+        let categoryName: string | null = null;
+
+        if (useExisting === 'yes') {
+            // Retrieve all category names from RxDB
+            if (!this.db || !this.db.appCategories) {
+                console.error('RxDB not initialized or appCategories collection missing');
+                this.toggleApps();
+                return;
+            }
+            const docs = await this.db.appCategories.find().exec();
+            const options: { [key: string]: string } = {};
+            docs.forEach((doc: any) => {
+                const name = (doc.categoryName as string).toLowerCase();
+                options[name] = this.uppercaseWords(name);
+            });
+            if (Object.keys(options).length === 0) {
+                this.toast.info('No existing categories found');
+                this.toggleApps();
+                return;
+            }
+            const selected = await this.selectBox.showOptions('Select category:', options);
+
+            if (!selected) {
+                this.toggleApps();
+                return;
+            }
+            categoryName = this.uppercaseWords(selected.toString());
+        }
+        else {
+            // Ask for new category name using PromptBoxComponent
+            categoryName = await this.promptBox.showPrompt('Enter new category name:');
+
+            if (!categoryName) {
+                this.toggleApps();
+                return;
+            }
         }
         if (!this.db || !this.db.appCategories) {
             console.error('RxDB not initialized or appCategories collection missing');
