@@ -1,4 +1,13 @@
 export default [{
+    name: "Notebook",
+    icon: "https://www.google.com/s2/favicons?sz=256&domain_url=logseq.com",
+    description: "Graph-based notebook",
+    id: "aimav.github.io/notebook",
+    url: "/apps/logseq-lf",
+    tags: ["utility", "tool", "notes", "note-taking", "data", "graph"],
+    integrated: true,
+    internal: true
+}, {
     name: "Calculator",
     icon: "https://www.calculator.net/favicon.ico",
     description: "Standard calculator",
