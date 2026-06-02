@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en" data-beasties-container>
+
+<head>
+    <meta charset="utf-8">
+    <title>Aimav W</title>
+    <base href="/">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <!-- Import Showdown library for markdown conversion -->
+    <script src="libs/showdown.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/jwt-decode@4.0.0/build/cjs/index.min.js"></script> -->
+
+    <script>
+        window.new_lock = function () {
+            var unlock, lock = new Promise((res, rej) => { unlock = res });
+            return [lock, unlock];
+        };
+        window.new_id = function () {
+            return `${Date.now()}-${Math.random().toString().replace('.', '')}`;
+        };
+    </script>
+<style>*{font-family:sans-serif}html,body{margin:0;padding:0;width:100vw;height:100vh;overflow:hidden;background-color:#efedf4}</style><link rel="stylesheet" href="styles-2LEEIVMU.css" media="print" onload="this.media='all'"><noscript><link rel="stylesheet" href="styles-2LEEIVMU.css"></noscript></head>
+
+<body>
+    <app-root></app-root>
+<script src="polyfills-KYZQLWB5.js" type="module"></script><script src="main-CN5M7APP.js" type="module"></script></body>
+
+</html>
