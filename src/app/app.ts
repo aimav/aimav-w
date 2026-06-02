@@ -743,6 +743,9 @@ export class App implements OnDestroy {
             "This folder will be added to a list of data folders.");
     }
 
+    async removeFromCategory(app: any): Promise<void> {
+    }
+
     protected async addToCategory(app: any): Promise<void> {
         this.toggleApps();
         // Ask user for category name using PromptBoxComponent
