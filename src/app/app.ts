@@ -737,6 +737,12 @@ export class App implements OnDestroy {
         this.toggleApps();
     }
 
+    async chooseData(): Promise<void> {
+        await this.msgBox.showMsg("Now choose a folder with data for AI to read, for example, " +
+            "the folders used for the built-in Notebook app.<br>" +
+            "This folder will be added to a list of data folders.");
+    }
+
     protected async addToCategory(app: any): Promise<void> {
         this.toggleApps();
         // Ask user for category name using PromptBoxComponent
