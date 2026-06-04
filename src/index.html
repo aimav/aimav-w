@@ -2,17 +2,29 @@
 <html lang="en">
 
 <head>
-  <meta charset="utf-8" />
-  <title>Aimav W</title>
-  <base href="/" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  <!-- Import Showdown library for markdown conversion -->
-  <script src="libs/showdown.min.js"></script>
+    <meta charset="utf-8" />
+    <title>Aimav W</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    <!-- Import Showdown library for markdown conversion -->
+    <script src="libs/showdown.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async></script>
+    <!-- <script src="https://cdn.jsdelivr.net/npm/jwt-decode@4.0.0/build/cjs/index.min.js"></script> -->
+
+    <script>
+        window.new_lock = function () {
+            var unlock, lock = new Promise((res, rej) => { unlock = res });
+            return [lock, unlock];
+        };
+        window.new_id = function () {
+            return `${Date.now()}-${Math.random().toString().replace('.', '')}`;
+        };
+    </script>
 </head>
 
 <body>
-  <app-root></app-root>
+    <app-root></app-root>
 </body>
 
 </html>

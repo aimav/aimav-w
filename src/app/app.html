@@ -26,22 +26,28 @@
         <button class="action-btn" id="btn-get-vault-password" (click)="getVaultPassword()">Get Vault Password</button>
 
         <div class="input-group">
-            <label class="input-label" for="input-vault-password">Vault Password</label>
+            <label class="input-label" for="input-vault-password">
+                <div style="display:flex; flex-direction: row; justify-content: space-between;">
+                    <span>Vault Password</span>
+                    <span style="text-decoration: underline; cursor: pointer;"
+                        (click)="clearVaultPassword()">Clear</span>
+                </div>
+            </label>
             <input class="input-field" id="input-vault-password" placeholder="Vault password" [value]="vaultPassword()"
                 readonly onclick="this.select();" />
         </div>
         <div class="separator-div" style="border-top:1px solid #777; margin-top:1rem;">&nbsp;</div>
 
-        <div class="input-group">
+        <div class="input-group" style="opacity:.5;">
             <label class="input-label" for="input-domain">Domain</label>
             <input class="input-field" id="input-domain" type="text" placeholder="Domain/Username"
                 [(ngModel)]="domain" />
         </div>
 
-        <button class="action-btn" id="btn-get-service-password" (click)="getServicePassword()">Get Service
-            Password</button>
+        <button class="action-btn" id="btn-get-service-password" (click)="getServicePassword()" style="opacity:.5;">Get
+            Service Password</button>
 
-        <div class="input-group">
+        <div class="input-group" style="opacity:.5;">
             <label class="input-label" for="input-service-password">Service Password</label>
             <input class="input-field" id="input-service-password" placeholder="Service password"
                 [value]="servicePassword()" readonly onclick="this.select();" />
@@ -55,18 +61,43 @@
                 style="cursor:pointer;" />
 
             <div>
-                <h1 class="banner-text" onclick="top.location='/';" style="cursor:pointer;">Aimav — AI and everything
-                    mapped
-                    into one</h1>
-                <div style="font-family: sans-serif; font-size:10px;">The AAA Solution — Auth, AI, Apps — for life,
-                    work, in a single unity, the AI-powered web OS</div>
+                <h1 class="banner-text" onclick="top.location='/';" style="cursor:pointer;">Aimav — AI and map to web
+                    world</h1>
+                <div style="font-family: sans-serif; font-size:10px;"><b>Auth</b>enticate to the web world through this
+                    <b>AI</b>-powered <b>M</b>etaOS, and
+                    <b>A</b>pps <b>V</b>ested with free OSS
+                </div>
             </div>
         </div>
 
         <!-- Chat log: shown only when chat panel is active -->
         <!-- @if (showChat()) { -->
-        <div class="chat-log" id="chat-log" #chatLog>
+        <div class="chat-log" id="chat-log" #chatLog style="margin-top:20px;">
             <!-- Chat messages appear here -->
+            <div id="intro-info" style="border-top:1px solid silver;">
+                <h2>Welcome to Aimav!</h2>
+                Missions
+                <ul>
+                    <li>To be a <u>start page for the web world</u> with <u>AI operate on apps data</u>.</li>
+                    <li>Authenticate to the web thru' this AI-powered webOS with built-in and integrated apps.
+                    </li>
+                </ul>
+                This is your workspace for both personal use and for other use-cases at work,
+                with authentication tool to generate access info to things you own.
+                You can use the generated vault password for your vault (passsword manager)
+                software or browser extension. The <i>service password generating feature
+                    is for side use</i> (side use only 'cause when auth root info ie. the fields shape & sound
+                are changed, all the services need to be updated with new passwords).
+                <div>&nbsp;</div>
+                Along side with authentication
+                <ul>
+                    <li>AI chatbot is also ready to use with integration with some apps.</li>
+                    <li>There are also apps available to pin to use.</li>
+                </ul>
+                <div>&nbsp;</div>
+                Aimav is a good start page for the web world.<br>
+                Have a nice day! Happy living, working!
+            </div>
         </div>
         <!-- } -->
 
@@ -75,8 +106,9 @@
             <textarea class="chat-textarea" id="chat-input" rows="2" placeholder="Type a message..."
                 [(ngModel)]="chatInput" (keyup.enter)="sendMessage($event)"></textarea>
             <div class="chat-actions">
-                <button class="chat-btn" id="btn-chat" (click)="toggleChat()">Chat</button>
+                <button type="button" class="chat-btn" id="btn-chat" (click)="showChatHistory()">Chat</button>
                 <button class="chat-btn" id="btn-apps" (click)="toggleApps()">Apps</button>
+                <button class="chat-btn" id="btn-data" (click)="chooseData()">Data</button>
             </div>
         </div>
     </div>
@@ -88,8 +120,10 @@
         </div>
 
         <div class="input-group">
-            <label class="input-label">Usage Guide</label>
-            <div style="padding-left:16px; height:40px; margin-top:1px;">Aimav needs an AI key to run.</div>
+            <label class="input-label">Account</label>
+            <div id="signin-w-google" style="padding-left:16px; height:40px; margin-top:1px;">
+                <a href="javascript:" (click)="signOut()">Logout</a>&nbsp;<small>{{email.split("@")[0]}}</small>
+            </div>
         </div>
 
         <div class="input-group">
@@ -110,16 +144,19 @@
         <div>&nbsp;</div>
 
         <div class="input-group">
-            <label class="input-label">Current Model</label>
+            <label class="input-label">AI & Data</label>
             <div style="height:40px; margin-top:1px;">
-                <a target="_blank" style="padding-left:16px;" href="javascript:">{{CUR_MODEL}}</a>
+                <a target="_blank" style="padding-left:16px;" href="javascript:"
+                    (click)="showModelInfo($event)">Model</a>
+                <a target="_blank" style="padding-left:16px;" href="javascript:" (click)="syncNow($event)">Sync
+                    Data</a>
             </div>
         </div>
 
         <div class="input-group">
             <label class="input-label">Support</label>
             <div style="height:40px; margin-top:1px;">
-                <a target="_blank" style="padding-left:16px;" href="javascript:">Feedback</a>
+                <a target="_blank" style="padding-left:16px;" href="https://fb.com/groups/aimav">Feedback</a>
             </div>
         </div>
 
@@ -129,21 +166,124 @@
     </div>
 </div>
 
+<!-- Context menu for app tiles -->
+<mat-menu #appMenu="matMenu">
+    <button mat-menu-item (click)="openApp(_contextApp)">Open</button>
+    <button mat-menu-item (click)="addToCategory(_contextApp)">Add to Category</button>
+    <button mat-menu-item (click)="removeFromCategory(_contextApp)">Remove from Category</button>
+    <button mat-menu-item (click)="pinApp(_contextApp)">Pin to Top</button>
+    <button mat-menu-item (click)="unpinApp(_contextApp)">Unpin</button>
+</mat-menu>
+<!-- Separate fixed trigger for the context menu -->
+<button mat-icon-button [matMenuTriggerFor]="appMenu" #fixedMenuTrigger="matMenuTrigger" [style.left]="menuPosition.x"
+    [style.top]="menuPosition.y"
+    style="position: fixed; top: 0; left: 0; width: 0; height: 0; opacity: 0; pointer-events: none;">
+</button>
+
+<!-- <prompt-box #promptBox></prompt-box> -->
 <!-- Apps overlay with backdrop -->
 @if (showApps()) {
 <div class="apps-backdrop" id="apps-backdrop" (click)="toggleApps()"></div>
 <div class="apps-overlay" id="apps-overlay">
-    <!-- Apps list generated from src/data/apps.js -->
-    <div class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
-        <div *ngFor="let app of apps" class="app-tile" style="width: 120px; text-align: center;">
+    <!-- Fixed navigation buttons added below apps overlay -->
+    <div class="app-nav-buttons"
+        style="position:static; top:10px; left:10px; z-index:1000; background:rgba(255,255,255,0.9); padding:5px; border-radius:5px; text-align: center;">
+        <button class="nav-btn" style="margin:2px;" (click)="navigateHome()">🏠Home</button>
+        <!-- Alphabet buttons -->
+        <ng-container *ngFor="let letter of alphabet">
+            <button class="nav-btn" style="margin:2px;" (click)="navigateLetter(letter)">{{letter}}</button>
+        </ng-container>
+        <button class="nav-btn" style="margin:2px;" (click)="navigateOther()">Others</button>
+    </div>
+    <input type="text" id="app-filter" class="app-filter" placeholder="Filter apps and extensions..."
+        onclick="this.value='';" (keyup)="handleAppFilterKeyup($event)" />
+
+    <!-- Apps in category -->
+    <h2 id="cat-app-list-heading" class="app-list-heading" style="margin: 0.5rem 1rem; font-size: 1.2rem;"
+        *ngIf="selectedCategory && selectedCategory.trim()">
+        {{selectedCategory}}
+        <span id="edit-category" title="Edit Category" style="cursor:pointer;" (click)="editCategory()">📝</span>
+        <span id="del-category" title="Delete Category" (click)="delCategory()" style="cursor:pointer;">❌</span>
+    </h2>
+    <div id="cat-app-list" class="apps-list" style="display:flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;"
+        *ngIf="selectedCategory && selectedCategory.trim()">
+        <div *ngFor="let app of filteredCatApps()" class="app-tile" title="Right-click for menu"
+            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center; position: relative;">
             <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
                 <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
                     alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
                 <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
+            </a>
+            <!-- Marker for internal apps -->
+            <span *ngIf="app.internal" class="internal-marker" title="Built-in app">B</span>
+            <!-- Marker for custom apps -->
+            <span *ngIf="app.custom" class="custom-marker" title="Custom app">C</span>
+        </div>
+    </div>
+
+    <!-- Pinned Apps list -->
+    <h2 id="pinned-app-list-heading" class="app-list-heading" style="margin: 0.5rem 1rem; font-size: 1.2rem;">
+        Pinned Apps
+        <button id="btn-add-custom-app" title="Add custom app" (click)="addCustomApp()">+</button>
+    </h2>
+    <div id="pinned-app-list" class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+        <div *ngFor="let app of filteredPinned()" class="app-tile" title="Right-click for menu"
+            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center; position: relative;">
+            <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
+                <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
+                    alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
+                <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
+            </a>
+            <!-- Marker for internal apps -->
+            <span *ngIf="app.internal" class="internal-marker" title="Built-in app">B</span>
+            <!-- Marker for custom apps -->
+            <span *ngIf="app.custom" class="custom-marker" title="Custom app">C</span>
+        </div>
+    </div>
+
+    <!-- Heading for Apps list -->
+    <h2 id="all-app-list-heading" class="app-list-heading" style="margin: 0.5rem 1rem; font-size: 1.2rem;">
+        All Apps
+        <button title="Suggest an app">+</button>
+    </h2>
+    <!-- Apps list generated from src/data/apps.js -->
+    <div id="all-app-list" class="apps-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+        <div *ngFor="let app of filteredApps().slice(0,30)" class="app-tile" title="Right-click for menu"
+            (contextmenu)="openContextMenu($event, app)" style="width: 120px; text-align: center; position: relative;">
+            <a [href]="app.url" target="_blank" style="text-decoration: none; color: inherit;">
+                <img [src]="app.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + app.url)"
+                    alt="{{app.name}} icon" style="width: 64px; height: 64px;" />
+                <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{app.name}}</div>
+            </a>
+            <span *ngIf="app.internal" class="internal-marker" title="Built-in app">B</span>
+        </div>
+    </div>
+
+    <!-- Heading for Extensions list -->
+    <h2 id="all-ext-list-heading" class="app-list-heading" style="margin: 0.5rem 1rem; font-size: 1.2rem;">
+        Browser Extensions
+        <button title="Suggest an extension">+</button>
+    </h2>
+    <!-- Extensions list generated from src/data/extensions.js -->
+    <div id="all-ext-list" class="extensions-list" style="display: flex; flex-wrap: wrap; gap: 1rem; padding: 1rem;">
+        <div *ngFor="let ext of filteredExtensions()" class="app-tile" title="Right-click for menu"
+            style="width: 120px; text-align: center;">
+            <a [href]="ext.url" target="_blank" style="text-decoration: none; color: inherit;">
+                <img [src]="ext.icon || ('https://www.google.com/s2/favicons?sz=256&domain_url=' + ext.url)"
+                    alt="{{ext.name}} icon" style="width: 64px; height: 64px;" />
+                <div class="app-name" style="margin-top: 0.5rem; font-size: 0.9rem;">{{ext.name}}</div>
             </a>
         </div>
     </div>
 </div>
 }
 
+<!-- Toast container for ng-angular-popup notifications -->
+<!-- https://www.npmjs.com/package/ng-angular-popup -->
+<ng-toast [position]="TOAST_POSITIONS.BOTTOM_CENTER" [width]="350"></ng-toast>
+
+<app-message-box #msgBox />
+<app-confirm-box #confirmBox />
+<app-prompt-box #promptBox></app-prompt-box>
+<app-select-box #selectBox></app-select-box>
 <router-outlet />

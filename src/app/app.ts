@@ -1,7 +1,40 @@
+import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
+import { SelectBoxComponent } from '../modules/selectbox';
+
+import { createRxDatabase, addRxPlugin } from 'rxdb';
+import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
+import { replicateGoogleDrive } from 'rxdb/plugins/replication-google-drive';
+import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
+addRxPlugin(RxDBUpdatePlugin);
+
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
+addRxPlugin(RxDBMigrationSchemaPlugin);
+
+import { RxDBCleanupPlugin } from 'rxdb/plugins/cleanup';
+addRxPlugin(RxDBCleanupPlugin);
+
+import { RxDBLeaderElectionPlugin } from 'rxdb/plugins/leader-election';
+addRxPlugin(RxDBLeaderElectionPlugin);
+
+import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
+addRxPlugin(RxDBDevModePlugin);
+import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+
+// Create a singleton instance
+// const db = new AimavDB();
+import { MatMenuModule, MatMenuTrigger } from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
 import { CommonModule } from '@angular/common';
+import { NgToastModule, NgToastService, TOAST_POSITIONS } from 'ng-angular-popup';
+// Updated import to match new msgbox.ts which now exports a component instead of a service
+import { MessageBoxComponent } from '../modules/msgbox';
+import { PromptBoxComponent } from '../modules/promptbox';
+import { ConfirmBoxComponent } from '../modules/confirmbox';
 // @ts-ignore: Importing JS module without type definitions
 import appsData from '../data/apps.js';
+// @ts-ignore: Importing JS module without type definitions
+import extensionsData from '../data/extensions.js';
 import { RouterOutlet } from '@angular/router';
 
 // Import Showdown for markdown rendering
@@ -12,13 +45,152 @@ import { sha1 } from '../modules/common.js';
 var log = console.log;
 // Streaming guide: https://openrouter.ai/openrouter/free
 const CURRENT_MODEL = "openrouter/free";
+const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
+
+const RXDB_SCHEMAS = {
+    chatMessages: {
+        migrationStrategies: {
+            // 1: (d: any) => d
+        },
+        schema: {
+            version: 0,
+            primaryKey: 'id', // FIELD
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 }, // FIELD
+                tokens: { // Lite FTS to avoid filtering 'messages' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                messages: { // FIELD
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            idstr: { type: 'string', maxLength: 100 }, // FIELD
+                            content: { type: 'string', maxLength: 1000 }, // FIELD
+                            timestamp: { type: "number", "multipleOf": 1 } // FIELD
+                        },
+                        required: ['idstr', 'content', 'timestamp'],
+                    }
+                },
+            },
+            required: ['year'],
+            indexes: ["year"]
+        }
+    },
+    notes: {
+        migrationStrategies: {
+            // 1: (d: any) => d
+        },
+        schema: {
+            version: 0,
+            primaryKey: 'id',
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 },
+                tokens: { // Lite FTS to avoid filtering 'notes' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                notes: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            idstr: { type: 'string', maxLength: 100 },
+                            title: { type: "string", maxLength: 1000 },
+                            content: { type: 'string', maxLength: 10000 },
+                            timestamp: { type: "number", "multipleOf": 1 }
+                        },
+                        required: ['idstr', "title", 'content', 'timestamp'],
+                    }
+                },
+            },
+            required: ['year'],
+            indexes: ["year"]
+        }
+    },
+    pinnedApps: {
+        migrationStrategies: {
+            // 1: (d: any) => d
+        },
+        schema: {
+            version: 0,
+            primaryKey: 'id',
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 },
+                tokens: { // Lite FTS to avoid filtering 'notes' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                name: { type: "string", maxLength: 100 },
+                url: { type: 'string', maxLength: 1000 },
+                icon: { type: 'string', maxLength: 1000 },
+                description: { type: 'string', maxLength: 1000 },
+                tags: { type: "array", items: { type: "string", maxLength: 100 } },
+                integrated: { type: "boolean" },
+                internal: { type: "boolean" },
+                custom: { type: "boolean" }
+            },
+            required: ['name', "url"],
+            indexes: ["name", "url"]
+        }
+    },
+    appCategories: {
+        migrationStrategies: {
+            1: (d: any) => d
+        },
+        schema: {
+            version: 1,
+            primaryKey: 'id',
+            type: 'object',
+            properties: {
+                id: { type: 'string', maxLength: 100 },
+                tokens: { // Lite FTS to avoid filtering 'apps' array
+                    // Badly indexeddb supports array indexing but not RxDB
+                    // need to use RxDB index, and scan (filter) inside group array instead
+                    type: "array",
+                    items: { type: "string", maxLength: 100 }
+                },
+                categoryName: { type: 'string', maxLength: 500 }, // Grouping up to avoid slow sync by item modified time 1 by 1
+                apps: {
+                    type: 'array',
+                    items: {
+                        type: 'object',
+                        properties: {
+                            idstr: { type: 'string', maxLength: 100 },
+                            name: { type: "string", maxLength: 1000 },
+                            url: { type: 'string', maxLength: 10000 },
+                            icon: { type: 'string', maxLength: 1000 }
+                        },
+                        required: ['idstr', "name", 'url'],
+                    }
+                },
+            },
+            required: ['categoryName'],
+            indexes: ["categoryName"]
+        }
+    }
+};
 
 @Component({
     selector: 'app-root',
     standalone: true,
-    imports: [RouterOutlet, FormsModule, CommonModule],
+    // Import MsgBoxComponent (standalone) for displaying messages
+    imports: [RouterOutlet, FormsModule, CommonModule, MatMenuModule, MatButtonModule, MessageBoxComponent, ConfirmBoxComponent, PromptBoxComponent, SelectBoxComponent, NgToastModule],
     templateUrl: './app.html',
     styleUrl: './app.css',
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 /**
  * Root component of the Aimav Web Application.
@@ -27,8 +199,142 @@ const CURRENT_MODEL = "openrouter/free";
  * input fields 1 minute after the last password generation action.
  */
 export class App implements OnDestroy {
+    TOAST_POSITIONS = TOAST_POSITIONS;
+    @ViewChild('promptBox') promptBox!: PromptBoxComponent;
+    // Alphabet array for navigation buttons
+    alphabet: string[] = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+
+    /**
+     * Navigate to home view.
+     */
+    navigateHome(): void {
+        console.log('Home button clicked');
+        this.selectedCategory = '';
+        this.appsInCategory.set([]);
+
+        // Hide the category app list and its heading
+        const catList = document.getElementById('cat-app-list');
+        const catHeading = document.getElementById('cat-app-list-heading');
+        if (catList) catList.style.display = 'none';
+        if (catHeading) catHeading.style.display = 'none';
+
+        // Show pinned apps list and heading
+        const pinnedList = document.getElementById('pinned-app-list');
+        const pinnedHeading = document.getElementById('pinned-app-list-heading');
+        if (pinnedList) pinnedList.style.display = 'flex';
+        if (pinnedHeading) pinnedHeading.style.display = '';
+
+        // Show all apps list and heading
+        const allApps = document.getElementById('all-app-list');
+        const allAppsHeading = document.getElementById('all-app-list-heading');
+        if (allApps) allApps.style.display = 'flex';
+        if (allAppsHeading) allAppsHeading.style.display = '';
+
+        // Show all extensions list and heading
+        const allExt = document.getElementById('all-ext-list');
+        const allExtHeading = document.getElementById('all-ext-list-heading');
+        if (allExt) allExt.style.display = 'flex';
+        if (allExtHeading) allExtHeading.style.display = '';
+    }
+
+    /**
+     * Handle alphabet button click.
+     * @param letter The clicked letter.
+     */
+    async navigateLetter(letter: string): Promise<void> {
+        console.log('Letter clicked:', letter);
+        // Convert to lowercase for case‑insensitive match
+        const lower = letter.toLowerCase();
+
+        if (!this.db || !this.db.appCategories) {
+            console.error('RxDB not initialized or appCategories collection missing');
+            return;
+        }
+        // Query categories where categoryName starts with the selected letter
+        const docs = await this.db.appCategories
+            .find({
+                selector: {
+                    categoryName: { $regex: '^' + lower, $options: 'i' }
+                },
+                limit: 100
+            })
+            .exec();
+        const options: { [key: string]: string } = {};
+
+        function uppercaseWords(str: string): string {
+            return str.replace(/\b\w/g, (char) => char.toUpperCase()).trim()
+                .replace(/[\s]{2,}/g, '\x20');
+        }
+        docs.forEach((doc: any) => {
+            const name = uppercaseWords(doc.categoryName as string);
+            options[name.toLowerCase()] = uppercaseWords(name);
+        });
+
+        if (Object.keys(options).length == 0) {
+            // await this.msgBox.showMsg("No categories found");
+            this.toast.info(`Letter ${letter.toUpperCase()}: No categories found`);
+            return;
+        }
+        else
+            if (this.selectBox) {
+                this.toggleApps();
+                const selectedCategory = await this.selectBox.showOptions("Select category:", options);
+                // Store the selected category name for UI display (non‑null after the guard above)
+                this.selectedCategory = uppercaseWords(selectedCategory as string);
+                log(selectedCategory);
+
+                if (!selectedCategory) {
+                    this.toggleApps();
+                    return;
+                }
+                // Show apps in the selected category
+                // Find the category document where categoryName matches the selectedCategory
+                try {
+                    const catDoc = await this.db.appCategories
+                        .findOne({
+                            selector: {
+                                categoryName: { $eq: selectedCategory }
+                            }
+                        })
+                        .exec();
+                    if (catDoc && catDoc.apps) {
+                        // Update the appsInCategory signal with the apps from the category
+                        // Ensure apps are sorted for consistent display
+                        this.appsInCategory.set(this.sortApps(catDoc.apps));
+                        // Also update the filtered signal used by the UI
+                        this.filteredCatApps.set(this.sortApps(catDoc.apps));
+                    } else {
+                        // Use info toast as warning alternative
+                        this.toast.info(`No apps found for category ${selectedCategory}`);
+                    }
+                } catch (e) {
+                    console.error('Error fetching apps for category', e);
+                    // Use info toast as fallback for error messages
+                    this.toast.info('Failed to load apps for selected category');
+                }
+                // Keep the apps overlay open to display the category apps
+                this.toggleApps();
+            }
+            else {
+                console.warn('SelectBoxComponent not available');
+            }
+    }
+
+    /**
+     * Handle Others button click.
+     */
+    navigateOther(): void {
+        console.log('Others button clicked');
+        // Implement navigation for other items.
+    }
+
+    // Removed MessageService injection as msgbox now provides a component
+    @ViewChild(SelectBoxComponent) selectBox!: SelectBoxComponent;
+    constructor(private cdr: ChangeDetectorRef, private toast: NgToastService) { }
     public CUR_MODEL = CURRENT_MODEL;
     protected readonly title = signal('aimav-w');
+    // Currently selected category name (used in the UI header)
+    public selectedCategory: string = '';
 
     /** Current value of the username input box. */
     protected username = signal('');
@@ -51,14 +357,157 @@ export class App implements OnDestroy {
     /** Current value of the chat textarea. */
     protected chatInput = signal('');
 
-    /** Whether the chat log panel is visible. */
-    protected showChat = signal(false);
-
     /** Whether the Apps overlay is visible. */
     protected showApps = signal(false);
 
+    protected email = localStorage.getItem('gEmail') || 'None';
+
+    // RxDB instance holder (initialized in ngOnInit)
+    private db: any;
+
     // List of apps for the overlay
     public apps = appsData;
+    // List of extensions for the overlay
+    public extensions = extensionsData;
+    // Filtered lists used for display based on the filter input
+    public filteredApps = signal<any[]>(this.sortApps(this.apps));
+    public filteredExtensions = signal<any[]>(this.extensions);
+    public filteredPinned = signal<any[]>(this.sortApps(this.getPinnedApps()));
+    // Signal holding apps for the selected category (typed to any[] to avoid "never" inference)
+    public appsInCategory = signal<any[]>([]);
+    // Filtered view of category apps (typed to any[])
+    public filteredCatApps = signal<any[]>([]);
+
+    handleAppFilterKeyup(event: KeyboardEvent) {
+        // Prevent default form/button behaviour just in case
+        event?.preventDefault?.();
+        const filterInput = (event.target as HTMLInputElement | null);
+
+        function appinfo_contains_all(app: any, toks: any[]) {
+            // name, description, id, url, tags
+            var s = (app.name || "") + " " + (app.description || "") + " " + (app.id || "")
+                + " " + (app.url || "") + " " + (app.tags ? app.tags.join(" ") : "");
+            s = s.toLowerCase();
+
+            for (var t of toks) {
+                if (!s.includes(t))
+                    return false;
+            }
+            return true;
+        }
+
+        if (filterInput) {
+            var filterText = filterInput.value.trim().toLowerCase();
+            filterText = filterText.replace(/\s+/g, '\x20');
+            var toks = filterText.split("\x20");
+
+            this.filteredApps.set(
+                this.sortApps(this.apps.filter((app: any) =>
+                    appinfo_contains_all(app, toks)
+                ))
+            );
+            this.filteredExtensions.set(
+                this.extensions.filter((ext: any) =>
+                    appinfo_contains_all(ext, toks)
+                )
+            );
+            this.filteredPinned.set(
+                this.sortApps(this.getPinnedApps().filter((app: any) =>
+                    appinfo_contains_all(app, toks)
+                ))
+            );
+        }
+    }
+
+    resetAppFilter() {
+        this.filteredApps.set(
+            this.sortApps(this.apps)
+        );
+        this.filteredExtensions.set(
+            this.extensions
+        );
+        this.filteredPinned.set(
+            this.sortApps(this.getPinnedApps())
+        );
+    }
+
+    /**
+     * Returns the list of pinned apps based on the IDs stored in localStorage.
+     * The IDs are stored under the key 'pinnedApps' as a JSON array.
+     */
+    public getPinnedApps(): any[] {
+        const stored = localStorage.getItem('pinnedApps');
+        let ids: any[] = [];
+
+        if (stored) {
+            try {
+                ids = JSON.parse(stored);
+                if (!Array.isArray(ids)) ids = [];
+            }
+            catch {
+                ids = [];
+            }
+        }
+
+        // Match stored ids with app objects (assumes each app has a unique 'id' property)
+        var pins = this.apps.filter((app: any) => ids.includes(app.id));
+        const custom = localStorage.getItem('customApps');
+        let customApps = [];
+
+        if (custom) {
+            try {
+                const parsed = JSON.parse(custom);
+
+                if (Array.isArray(parsed)) {
+                    customApps = parsed.map((app: any) => ({
+                        ...app,
+                        integrated: false,
+                        internal: false,
+                        custom: true,
+                        // other missing fields remain as is (null/undefined)
+                    }));
+                }
+            } catch { }
+        }
+        var finalList = pins.concat(customApps);
+
+        for (let app of finalList)
+            if (app.id == null)
+                // @ts-ignore
+                app.id = window.new_id();
+
+        (async () => {
+            // Empty out the RxDB pinnedApps collection and repopulate it with the current list.
+            // This is done asynchronously and any errors are logged but do not block the return.
+            if (this.db && this.db.pinnedApps) {
+                // Remove all existing documents in the pinnedApps collection.
+                await this.db.pinnedApps.find().remove();
+                await this.db.pinnedApps.cleanup(0);
+
+                // Insert the updated list into the collection.
+                await this.db.pinnedApps.bulkInsert(finalList);
+            }
+        })();
+
+        return finalList;
+    }
+
+    /**
+     * Sort a list of apps so that those with `internal=true` appear first,
+     * followed by alphabetical order of the app name (case‑insensitive).
+     */
+    private sortApps(list: any[]): any[] {
+        return list.slice().sort((a: any, b: any) => {
+            const aInternal = !!a.internal;
+            const bInternal = !!b.internal;
+            if (aInternal !== bInternal) {
+                return aInternal ? -1 : 1;
+            }
+            const nameA = (a.name || "").toLowerCase();
+            const nameB = (b.name || "").toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+    }
 
     /** Handle for the auto-clear timer so it can be cancelled or reset. */
     private clearTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -108,19 +557,21 @@ export class App implements OnDestroy {
      * and stores it in the browser's localStorage under the key "aiKey".
      * Uses Angular's ViewChild to access the element in an Angular‑friendly way.
      */
-    public setAIKey(event: Event): void {
+    public async setAIKey(event: Event): Promise<void> {
         // Prevent default form/button behaviour just in case
         event?.preventDefault?.();
         // Access the input element via the DOM. Since the element is not a component
         // property, we query it directly but still within Angular's zone.
         const input = (event.target as HTMLElement).ownerDocument.getElementById('input-ai-key') as HTMLInputElement | null;
+
         if (input) {
             const key = input.value.trim();
             if (key) {
                 localStorage.setItem('aiKey', key);
+                this.msgBox.showMsg("AI key set");
             } else {
                 // If empty, remove the stored key
-                if (confirm('Are you sure you want to remove the AI key?'))
+                if ((await this.showConfirm('Are you sure you want to remove the AI key?')) == 'yes')
                     localStorage.removeItem('aiKey');
             }
         }
@@ -162,34 +613,667 @@ export class App implements OnDestroy {
         this.resetClearTimer();
     }
 
+
+    async syncNow(event: Event) {
+        await this.signInWithGoogle();
+
+        // @ts-ignore
+        if (window.gAccessToken == null) {
+            this.msgBox.showMsg("No Google Drive access token found, " +
+                "click Sync Data to authenticate with Google Drive.");
+            return;
+        }
+        var stores = Object.keys(RXDB_SCHEMAS);
+
+        for (let store of stores) {
+            log("Synchronising " + store);
+            this.toast.info("Synchronising " + store);
+            const replicationState = await replicateGoogleDrive({
+                replicationIdentifier: `aimav-${store}`,
+                collection: this.db[store], // RxCollection
+                googleDrive: {
+                    oauthClientId: G_APP_CLIENT_ID,
+                    // @ts-ignore
+                    authToken: window.gAccessToken, // USER_ACCESS_TOKEN
+                    folderPath: `Aimav/${store}`
+                },
+                live: false, // Do full sync once when user clicks Sync Data
+                pull: {
+                    batchSize: 60,
+                    modifier: doc => doc // (optional) modify invalid data
+                },
+                push: {
+                    batchSize: 60,
+                    modifier: doc => doc // (optional) modify before sending
+                }
+            });
+
+            // Observe replication states
+            replicationState.error$.subscribe(err => {
+                console.error('Replication error:', err);
+            });
+            await replicationState.awaitInitialReplication();
+        }
+        this.toast.success("Synchronization completed");
+    }
+
+
     /**
-     * Toggles the visibility of the chat log panel.
+     * Load and display stored chat history from RxDB.
+     * The collection `chatMessages` stores messages grouped by year.
+     * This method queries all documents, iterates over each year's messages
+     * and appends them to the chat log element.
      */
-    protected toggleChat(): void {
-        this.showChat.update(v => !v);
+    public async showChatHistory(): Promise<void> {
+        if (!this.db) {
+            console.error('RxDB instance not initialized');
+            return;
+        }
+        try {
+            const year: number = new Date().getFullYear();
+            const docs = await this.db.chatMessages.find({
+                selector: { year: year },
+                index: ['year']
+            }).exec();
+            let html = "<u>Recent Messages:</u> <br>";
+            let count = 0;
+
+            // Optionally clear previous entries except intro info
+            // Append each year's messages
+            for (const doc of docs) {
+                for (const msg of doc.messages) {
+                    html += `•\x20${msg.content}<br/>`;
+                    count++;
+                    if (count >= 100) break;
+                }
+                if (count >= 100) break;
+            }
+            if (count === 0) html += "(No messages yet)<br/>";
+            this.msgBox.showMsg(html);
+        }
+        catch (e) {
+            console.error('Failed to load chat history from RxDB', e);
+        }
     }
 
     /**
      * Toggles the visibility of the Apps overlay.
      */
     protected toggleApps(): void {
+        this.resetAppFilter();
         this.showApps.update(v => !v);
     }
 
+    // Add custom app using PromptBoxComponent
+    protected async addCustomApp(): Promise<void> {
+        // Keep the apps overlay open to display the category apps
+        // (toggleApps was called earlier to close, now reopen)
+        this.toggleApps();
+        // this.cdr.detectChanges();
+        // await new Promise(resolve => setTimeout(resolve, 0));
+
+        // Ask for app name
+        const name = await this.promptBox.showPrompt('Enter custom app name:');
+
+        if (!name) {
+            this.toggleApps();
+            return;
+        }
+
+        // Ask for URL
+        const url = await this.promptBox.showPrompt('Enter custom app URL:');
+
+        if (!url) {
+            this.toggleApps();
+            return;
+        }
+        // console.log('Custom app added:', name, url);
+
+        // Store custom apps in localStorage.customApps array
+        let customApps: any[] = [];
+        const stored = localStorage.getItem('customApps');
+
+        if (stored) {
+            try { customApps = JSON.parse(stored); } catch { customApps = []; }
+        }
+        // Create app object
+        customApps.push({ name, url });
+        localStorage.setItem('customApps', JSON.stringify(customApps));
+        this.toggleApps();
+    }
+
+    async chooseData(): Promise<void> {
+        await this.msgBox.showMsg("Now choose a folder with data for AI to read, for example, " +
+            "the folders used for the built-in Notebook app.<br>" +
+            "This folder will be added to a list of data folders.");
+    }
+
+    async removeFromCategory(app: any): Promise<void> {
+        // Ensure a category is selected
+        if (!this.selectedCategory || this.selectedCategory.trim() === "") {
+            this.toast.info("No category selected");
+            return;
+        }
+        // Stored as lowercase with single spaces in db
+        var selectedCategory = this.selectedCategory.toLocaleLowerCase().trim()
+            .replace(/[\s]{2,}/g, '\x20');
+
+        if (!this.db || !this.db.appCategories) {
+            console.error('RxDB not initialized or appCategories collection missing');
+            this.toast.info('Database not ready');
+            return;
+        }
+
+        // Find the category document matching the selected category name
+        const catDoc = await this.db.appCategories
+            .findOne({ selector: { categoryName: { $eq: selectedCategory } } })
+            .exec();
+
+        if (!catDoc) {
+            this.toast.info(`Category ${selectedCategory} not found`);
+            return;
+        }
+
+        if (!catDoc.apps || catDoc.apps.length === 0) {
+            this.toast.info(`No apps in category ${selectedCategory}`);
+            return;
+        }
+
+        // Find index of app with matching URL
+        const index = catDoc.apps.findIndex((a: any) => a.url === app.url);
+
+        if (index === -1) {
+            this.toast.info('App not found in selected category');
+            return;
+        }
+
+        // Remove the app from the array and patch the document
+        const newApps = catDoc.apps.slice();
+        newApps.splice(index, 1);
+        await catDoc.patch({ apps: newApps });
+        this.toast.info(`Removed app from ${selectedCategory}`);
+    }
+
+    /**
+     * Prompt the user to edit the currently selected category name.
+     * Uses PromptBoxComponent to get the new name, defaulting to the current name.
+     * Updates the category document in the appCategories collection, storing the
+     * name in lowercase (as used throughout the database queries).
+     */
+    async editCategory(): Promise<void> {
+        // Ensure a category is selected
+        if (!this.selectedCategory || this.selectedCategory.trim() === "") {
+            this.toast.info("No category selected");
+            return;
+        }
+        this.toggleApps();
+
+        // Prompt for new name, default to current displayed name
+        const newName = await this.promptBox.showPrompt('Edit category name:', this.selectedCategory);
+
+        if (!newName) {
+            // User cancelled or entered empty string
+            this.toggleApps();
+            return;
+        }
+
+        // Normalise the name for storage (lowercase, single spaces)
+        const normalized = newName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
+
+        // Find the existing category document
+        const catDoc = await this.db.appCategories
+            .findOne({
+                selector: {
+                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
+                }
+            })
+            .exec();
+
+        if (!catDoc) {
+            this.toast.info(`Category ${this.selectedCategory} not found`);
+            this.toggleApps();
+            return;
+        }
+
+        // Update the categoryName field
+        await catDoc.patch({ categoryName: normalized });
+        // Update UI state
+        this.selectedCategory = newName;
+        this.toast.success('Category name updated');
+        this.toggleApps();
+    }
+
+    async delCategory(): Promise<void> {
+        // Ensure a category is selected
+        if (!this.selectedCategory || this.selectedCategory.trim() === "") {
+            this.toast.info("No category selected");
+            return;
+        }
+        this.toggleApps();
+
+        // Ask for confirm
+        const confirm = await this.confirmBox.showConfirm('Sure to delete category: '
+            + this.selectedCategory + "?");
+
+        if (confirm != "yes") {
+            // User cancelled or entered empty string
+            this.toggleApps();
+            return;
+        }
+
+        // Find the existing category document
+        const catDoc = await this.db.appCategories
+            .findOne({
+                selector: {
+                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
+                }
+            })
+            .exec();
+
+        if (!catDoc) {
+            this.toast.info(`Category ${this.selectedCategory} not found`);
+            this.toggleApps();
+            return;
+        }
+
+        // Del
+        await catDoc.remove();
+        // Update UI state
+        this.selectedCategory = "";
+        this.toast.success('Category deleted');
+        this.toggleApps();
+    }
+
+    uppercaseWords(str: string): string {
+        return str.replace(/\b\w/g, (char) => char.toUpperCase()).trim()
+            .replace(/[\s]{2,}/g, '\x20');
+    }
+
+    protected async addToCategory(app: any): Promise<void> {
+        this.toggleApps();
+        // Ask user whether to add to an existing category or create a new one
+        const useExisting = await this.confirmBox.showConfirm('Add to existing category?');
+
+        let categoryName: string | null = null;
+
+        if (useExisting === 'yes') {
+            // Retrieve all category names from RxDB
+            if (!this.db || !this.db.appCategories) {
+                console.error('RxDB not initialized or appCategories collection missing');
+                this.toggleApps();
+                return;
+            }
+            const docs = await this.db.appCategories.find().exec();
+            const options: { [key: string]: string } = {};
+            docs.forEach((doc: any) => {
+                const name = (doc.categoryName as string).toLowerCase();
+                options[name] = this.uppercaseWords(name);
+            });
+            if (Object.keys(options).length === 0) {
+                this.toast.info('No existing categories found');
+                this.toggleApps();
+                return;
+            }
+            const selected = await this.selectBox.showOptions('Select category:', options);
+
+            if (!selected) {
+                this.toggleApps();
+                return;
+            }
+            categoryName = this.uppercaseWords(selected.toString());
+        }
+        else {
+            // Ask for new category name using PromptBoxComponent
+            categoryName = await this.promptBox.showPrompt('Enter new category name:');
+
+            if (!categoryName) {
+                this.toggleApps();
+                return;
+            }
+        }
+        if (!this.db || !this.db.appCategories) {
+            console.error('RxDB not initialized or appCategories collection missing');
+            log("db:", this.db);
+            log("appCategories:", this.db.appCategories);
+            this.toggleApps();
+            return;
+        }
+        categoryName = categoryName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
+
+        // Find existing category document
+        const existing = await this.db.appCategories.findOne({ selector: { categoryName } }).exec();
+        const appInfo = { idstr: app.id, name: app.name, url: app.url, icon: app.icon };
+        log(existing)
+        log(appInfo)
+
+        if (appInfo.icon == null)
+            appInfo.icon = "https://www.google.com/s2/favicons?sz=256&domain_url=" + appInfo.url;
+
+        if (existing) {
+            // Update existing category – add app if not already present
+            const already = existing.apps.find((a: any) => a.idstr === app.id);
+
+            if (!already) {
+                // existing.apps.push(appInfo);
+                await existing.patch({
+                    apps: [...existing.apps, appInfo]
+                });
+
+                // Update tokens for search (simple tokenization)
+                // existing.tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
+                // await existing.save();
+            }
+        }
+        else {
+            // Create new category document
+            const id = (window as any).new_id ? (window as any).new_id() : `${Date.now()}`;
+            const tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
+            await this.db.appCategories.insert({
+                id,
+                categoryName,
+                tokens,
+                apps: [appInfo]
+            });
+        }
+        this.toggleApps();
+    }
+
     @ViewChild('chatLog', { static: false }) chatLogDiv!: ElementRef<HTMLDivElement>;
+    @ViewChild(MatMenuTrigger) menuTrigger!: MatMenuTrigger;
+    @ViewChild('fixedMenuTrigger') fixedMenuTrigger!: MatMenuTrigger;
+    // Reference to the message box component for showing messages
+    @ViewChild(MessageBoxComponent) msgBox!: MessageBoxComponent;
+
+    // Reference to the confirm box component for showing messages
+    @ViewChild(ConfirmBoxComponent) confirmBox!: ConfirmBoxComponent;
+
+    protected async showConfirm(msg: string): Promise<"yes" | "no"> {
+        return await this.confirmBox.showConfirm(msg);
+    }
+
+    /** Holds the app currently right‑clicked for the context menu */
+    public _contextApp: any = null;
+
+    /** Open the app URL in a new browser tab */
+    protected openApp(app: any): void {
+        if (app && app.url) {
+            window.open(app.url, '_blank');
+        }
+    }
+
+    protected pinApp(app: any): void {
+        // Retrieve existing pinned apps from localStorage or initialize empty array
+        const stored = localStorage.getItem('pinnedApps');
+        let pinned: any[] = [];
+
+        if (stored) {
+            try {
+                pinned = JSON.parse(stored);
+                if (!Array.isArray(pinned)) pinned = [];
+            } catch {
+                pinned = [];
+            }
+        }
+        // Ensure the app has an identifier (use id property if present, otherwise the whole object)
+        const appId = app?.id ?? null;
+
+        // Add if not already present
+        if (appId != null && !pinned.includes(appId)) {
+            pinned.push(appId);
+        }
+        // Save back to localStorage
+        localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+        this.resetAppFilter();
+    }
+
+    protected unpinApp(app: any): void {
+        // Retrieve existing pinned apps from localStorage or initialize empty array
+        const stored = localStorage.getItem('pinnedApps');
+        let pinned: any[] = [];
+
+        if (stored) {
+            try {
+                pinned = JSON.parse(stored);
+                if (!Array.isArray(pinned)) pinned = [];
+            } catch {
+                pinned = [];
+            }
+        }
+        // Determine the identifier used for the app (same logic as pinApp)
+        const appId = app?.id ?? null;
+        // Remove the appId if present
+        const index = pinned.indexOf(appId);
+
+        if (index !== -1) {
+            pinned.splice(index, 1);
+        }
+        // Save the updated list back to localStorage
+        localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+        this.resetAppFilter();
+    }
+
+    menuPosition = { x: '0px', y: '0px' };
+
+    /** Handle right‑click on an app tile to show the context menu */
+    protected openContextMenu(event: MouseEvent, app: any): void {
+        event.preventDefault();
+        this._contextApp = app;
+        // Set menu data for the trigger (used by the hidden fixed trigger)
+        if (this.menuTrigger) {
+            this.menuTrigger.menuData = { app };
+        }
+        // Open the hidden fixed trigger's menu and position it at the click location
+        if (this.fixedMenuTrigger) {
+            this.menuPosition = { x: event.clientX + 'px', y: event.clientY + 'px' };
+            this.fixedMenuTrigger.openMenu();
+
+            // const overlay = (this.fixedMenuTrigger as any).overlayRef;
+            // if (overlay && typeof overlay.updatePosition === 'function') {
+            //     overlay.updatePosition({
+            //         originX: 'start', originY: 'top',
+            //         overlayX: 'start', overlayY: 'top',
+            //         offsetX: event.clientX,
+            //         offsetY: event.clientY,
+            //     });
+            // }
+        }
+    }
+
+    /**
+     * Displays a message box with the current model name.
+     * Uses the MessageService to show an informational toast.
+     */
+    /**
+     * Displays a message box with the current model name.
+     */
+    /** Show a toast with the current model name. */
+    public async showModelInfo(event: Event): Promise<void> {
+        event.preventDefault();
+        // Use the message box component to display the current model name
+        if (this.msgBox) {
+            this.msgBox.showMsg(`Current model: ${this.CUR_MODEL}`);
+        } else {
+            // Fallback in case the component reference is not available
+            console.log(`Current model: ${this.CUR_MODEL}`);
+        }
+    }
+
+    protected clearVaultPassword(): void {
+        // Clear all input fields in the left column, including generated passwords.
+        // Reuse existing clearAll method to reset signals.
+        this.clearAll();
+    }
+
+    public async handleCredentialResponse(response: any): Promise<void> {
+        // console.log(response);
+        /*
+        {
+            "oauth_metadata": "xxx",
+            "gis_params": "xxx",
+            "iss": "https://accounts.google.com",
+            "access_token": "ya29.xxx",
+            "token_type": "Bearer",
+            "expires_in": 3599,
+            "scope": "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid",
+            "authuser": "0",
+            "prompt": "consent"
+        }
+        */
+        // @ts-ignore - window is not defined in this context
+        window.gAccessToken = response.access_token;
+        const accessToken = response.access_token;
+
+        // fetch user info
+        const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+            headers: { Authorization: `Bearer ${accessToken}` }
+        });
+        const user = await res.json();
+        console.log(user.email, user.name);
+        // @ts-ignore - localStorage is not defined in this context
+        localStorage.gEmail = user.email;
+        this.email = user.email;
+        this.cdr.markForCheck(); // Tell Angular to re-check this component
+    }
+
+    gInitialized = false;
+
+    /**
+     * Placeholder for Google Sign‑In integration.
+     * Currently logs a message; replace with real OAuth flow as needed.
+     */
+    public async signInWithGoogle(): Promise<void> {
+        // https://developers.google.com/identity/gsi/web/guides/display-button#javascript        
+
+        if (this.gInitialized == false) {
+            // @ts-ignore - google is loaded globally from src/libs/gsi.js
+            google.accounts.id.initialize({
+                client_id: G_APP_CLIENT_ID,
+                scope: "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid"
+            });
+            this.gInitialized = true;
+        }
+
+        // @ts-ignore - google is loaded globally from src/libs/gsi.js
+        // google.accounts.id.prompt(); // also display the One Tap dialog
+
+        // @ts-ignore
+        var [lock, unlock] = new_lock();
+        const This = this;
+
+        async function handleCredentialResponse(response: any) {
+            try {
+                await This.handleCredentialResponse(response);
+            } finally {
+                unlock();
+            }
+        }
+
+        // @ts-ignore
+        const tokenClient = google.accounts.oauth2.initTokenClient({
+            client_id: G_APP_CLIENT_ID,
+            scope: "email profile https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email openid",
+            callback: handleCredentialResponse
+        });
+
+        // prompt:
+        // "consent" --> show 3 dialogs always -> clumpsy
+        // "none" --> no dialogs -> no permissions
+        // "select_account" -> choose acc only -> no permissions
+        // null --> default
+        // "" --> default? 3 dialogs once, 1 dialog after that
+        tokenClient.requestAccessToken({ prompt: "" });
+        await lock;
+    }
+
+    public async signOut() {
+        if (this.gInitialized == false) {
+            // @ts-ignore - google is loaded globally from src/libs/gsi.js
+            google.accounts.id.initialize({
+                client_id: G_APP_CLIENT_ID
+            });
+            this.gInitialized = true;
+        }
+
+        var email = localStorage.getItem('gEmail');
+        // @ts-ignore
+        var [lock, unlock] = new_lock();
+        // @ts-ignore
+        google.accounts.id.revoke(email, (response) => {
+            console.log(response.successful, response.error);
+            unlock();
+        });
+        await lock;
+        localStorage.removeItem('gEmail');
+        top?.location.reload();
+    }
+
+    // RxDB instance holder (initialized in ngOnInit)
+    // (declaration moved to end of class)
+
+    tokenize(str: string) {
+        const tokens = this.normalise(str).split(' ');
+        return tokens.filter(t => t.length > 0);
+    }
 
     public async sendMessage(ev: Event) {
         ev.preventDefault();
         const message = this.chatInput();
+
+        // Save the user's message to IndexedDB using RxDB
+        // Store the message grouped by year. If a record for the current year exists,
+        // push the new message into its `messages` array; otherwise create a new record.
+        try {
+            const currentYear = new Date().getFullYear();
+            // Prepare the new message object and compute token array from its content
+            const tokenArray = this.normalise(message).split(' ');
+            const newMsg = {
+                // @ts-ignore – window.new_id is defined globally
+                idstr: (window as any).new_id(),
+                content: message,
+                timestamp: Date.now()
+            };
+
+            // Attempt to fetch an existing year record using RxDB query
+            const existingDoc = await this.db.chatMessages.findOne({
+                selector: { year: currentYear }
+            }).exec();
+
+            if (existingDoc) {
+                const msgs = existingDoc.get('messages') as any[];
+                const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
+                // Update tokens field by appending tokens from the new message
+                const existingTokens = existingDoc.get('tokens') as any[] || [];
+                const updatedTokens = Array.isArray(existingTokens) ? [...existingTokens, ...tokenArray] : [...tokenArray];
+                await existingDoc.update({ $set: { messages: updatedMsgs, tokens: updatedTokens } });
+            }
+            else {
+                // No record for this year yet – insert a new document
+                // Generate a unique id for the document (e.g., using timestamp and year)
+                // @ts-ignore
+                const docId = window.new_id();
+                await this.db.chatMessages.insert({
+                    id: docId,
+                    year: currentYear,
+                    messages: [newMsg],
+                    tokens: tokenArray
+                });
+            }
+        }
+        catch (e) {
+            console.error('Failed to store chat message in IndexedDB via RxDB', e);
+        }
+
         // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
         if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
             const entry = document.createElement('div');
-            entry.innerHTML = `<b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
+            entry.innerHTML = `<h1 style="border-left:1px solid silver;">&nbsp;</h1><b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
             this.chatLogDiv.nativeElement.appendChild(entry);
             this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
         }
         // Clear the input field
         this.chatInput.set("");
+
+        this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
 
         // Send the message to OpenRouter if an API key is stored
         const apiKey = localStorage.getItem('aiKey');
@@ -204,6 +1288,10 @@ export class App implements OnDestroy {
             manuallyScrolled = true;
         });
 
+        if (!apiKey) {
+            this.msgBox.showMsg("Please get AI key and save it on right column first.")
+            return;
+        }
         if (apiKey) {
             // Show a temporary "Asking model..." message in the chat log
             const askingDiv = document.createElement('div');
@@ -316,9 +1404,27 @@ export class App implements OnDestroy {
         }
     }
 
-    public ngOnInit(): void {
+    public async ngOnInit(): Promise<void> {
+        await Notification.requestPermission();
+        // Show a toast notification on app initialization at bottom right
+        // Show a toast notification on app initialization
+        // Using NgToastService to show a simple success toast on init
+        // The service's success method accepts a string message.
+        // this.toast.success('App initialized');
         log("Apps data:", this.apps);
-        this.apps = this.apps.sort((a: any, b: any) => a.name.localeCompare(b.name));
+        // Sort apps: internal apps first, then alphabetically by name
+        this.apps = this.sortApps(this.apps);
+
+        const storageWithValidation = wrappedValidateAjvStorage({
+            storage: getRxStorageDexie()
+        });
+        // Initialise RxDB and store the instance on the component for later use
+        this.db = await createRxDatabase({
+            name: 'aimav',
+            storage: storageWithValidation
+        });
+
+        await this.db.addCollections(RXDB_SCHEMAS);
     }
 
     /**
@@ -326,10 +1432,13 @@ export class App implements OnDestroy {
      * destruction to prevent callbacks firing on a destroyed component.
      */
     public ngOnDestroy(): void {
-
         if (this.clearTimerId !== null) {
             clearTimeout(this.clearTimerId);
         }
     }
 }
+
+
+
+
 

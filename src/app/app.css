@@ -11,8 +11,21 @@
     border-radius: 10px;
 }
 
+#chat-log::-webkit-scrollbar-thumb {
+    background: #fee !important;
+    border-radius: 10px;
+}
+
 ::-webkit-scrollbar-thumb:hover {
     background: silver !important;
+}
+
+#chat-log::-webkit-scrollbar-thumb:hover {
+    background: pink !important;
+}
+
+.app-nav-buttons button {
+    height:25px; vertical-align: bottom;;
 }
 
 :host {
@@ -297,6 +310,9 @@
 }
 
 /* ── Apps overlay ─────────────────────────────────────── */
+.mat-mdc-menu-content {
+    background-color: white;
+}
 
 .apps-backdrop {
     position: fixed;
@@ -309,6 +325,8 @@
 
 .apps-overlay {
     position: fixed;
+    overflow-x: hidden;
+    overflow-y: auto;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
@@ -320,8 +338,13 @@
     border-radius: 20px;
     box-shadow: 0 24px 80px rgba(0, 0, 0, 0.18);
     z-index: 101;
-    overflow: hidden;
     animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Center headings inside the apps overlay */
+.apps-overlay h2 {
+    text-align: center;
+    margin: 0.5rem 1rem;
 }
 
 @keyframes fadeIn {

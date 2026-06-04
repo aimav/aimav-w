@@ -1,7 +1,7 @@
 # Aimav W
 
 Aimav Web Project<br>
-AI, MetaOS, and Apps, Vibed, Combined into One
+AI, MetaOS, and Apps, Vested with open-source software & libs
 
 
 # Dependencies

@@ -1,4 +1,8 @@
 /* Global resets to ensure layout takes full screen */
+* {
+    font-family: sans-serif;
+}
+
 html,
 body {
     margin: 0;
@@ -7,4 +11,72 @@ body {
     height: 100vh;
     overflow: hidden;
     background-color: oklch(95% 0.01 300);
+}
+
+.apps-list,
+.extensions-list {
+    background-color: white;
+    border-radius: 1rem;
+    justify-content: center;
+}
+
+/* Material menu content background – moved to global stylesheet so it applies to overlay panels */
+.mat-mdc-menu-content {
+    background-color: white;
+    border-radius: 10px;
+}
+
+.mat-mdc-menu-content>button:hover {
+    background-color: #fee !important;
+}
+
+.app-filter {
+    width: 50vw;
+    margin-left: calc(25vw - 30px);
+    margin-top: 0;
+    height: 30px;
+    border: 0;
+    border-radius: 1rem;
+    padding-left: 1rem;
+}
+
+/* Marker for internal apps: letter A inside a circle positioned at bottom‑right of the app‑tile */
+.internal-marker {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 20px;
+    height: 20px;
+    background: #ff5722;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    border-radius: 50%;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    z-index: 2;
+    cursor: default;
+}
+
+.custom-marker {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    width: 20px;
+    height: 20px;
+    background: blue;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    line-height: 20px;
+    text-align: center;
+    border-radius: 50%;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.5);
+    z-index: 2;
+    cursor: default;
+}
+
+.app-tile img {
+    border-radius: 10px;
 }
