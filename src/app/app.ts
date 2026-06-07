@@ -450,32 +450,6 @@ export class App implements OnDestroy {
         }
         var finalList = pins.concat(customApps);
 
-        for (let app of finalList)
-            // @ts-ignore
-            app.id = window.new_id();
-
-        (async () => {
-            // Sync Dexie pinnedApps table with the current list.
-            if (this.db && this.db.pinnedApps) {
-                // Insert each app from finalList into the pinnedApps object store
-                // only if an entry with the same URL does not already exist.
-                for (const app of finalList) {
-                    try {
-                        const existing = await this.db.pinnedApps
-                            .where('url')
-                            .equals(app.url)
-                            .first();
-                        if (!existing) {
-                            // Ensure required fields are present; Dexie will generate an id if missing.
-                            await this.db.pinnedApps.add(app);
-                        }
-                    } catch (e) {
-                        console.error('Error syncing pinned app', app, e);
-                    }
-                }
-            }
-        })();
-
         return finalList;
     }
 
@@ -951,7 +925,7 @@ export class App implements OnDestroy {
     }
 
     protected pinApp(app: any): void {
-        // Retrieve existing pinned apps from localStorage or initialize empty array
+        // --- LocalStorage handling (unchanged) ---------------------------------
         const stored = localStorage.getItem('pinnedApps');
         let pinned: any[] = [];
 
@@ -963,44 +937,81 @@ export class App implements OnDestroy {
                 pinned = [];
             }
         }
-        // Ensure the app has an identifier (use id property if present, otherwise the whole object)
         const appId = app?.id ?? null;
 
-        // Add if not already present
         if (appId != null && !pinned.includes(appId)) {
             pinned.push(appId);
         }
-        // Save back to localStorage
         localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+
+        // --- Dexie IndexedDB handling ------------------------------------------
+        // Ensure Dexie DB is initialized and the pinnedApps table exists.
+        if (this.db && this.db.pinnedApps) {
+            // Use the app's URL as a unique key to avoid duplicates.
+            (async () => {
+                try {
+                    const existing = await this.db.pinnedApps
+                        .where('url')
+                        .equals(app.url)
+                        .first();
+                    if (!existing) {
+                        // Dexie will generate an id if not provided.
+                        await this.db.pinnedApps.add(app);
+                    }
+                    log("pinned");
+                } catch (e) {
+                    console.error('Error adding pinned app to Dexie', e);
+                }
+            })();
+        }
+
         this.resetAppFilter();
     }
 
+    // 
     protected unpinApp(app: any): void {
-        // Retrieve existing pinned apps from localStorage or initialize empty array
+        // The goal is to ensure the persisted list of pinned app IDs only contains
+        // IDs that are still present in the current `pinned` array (i.e., the apps
+        // currently displayed as pinned). Any ID not present should be removed.
+
+        // Retrieve the stored pinned IDs from localStorage (or initialise an empty array).
         const stored = localStorage.getItem('pinnedApps');
-        let pinned: any[] = [];
+        let storedIds: any[] = [];
 
-        if (stored) {
-            try {
-                pinned = JSON.parse(stored);
-                if (!Array.isArray(pinned)) pinned = [];
-            } catch {
-                pinned = [];
-            }
+        try {
+            storedIds = stored ? JSON.parse(stored) : [];
+            if (!Array.isArray(storedIds)) storedIds = [];
+        } catch {
+            storedIds = [];
         }
-        // Determine the identifier used for the app (same logic as pinApp)
-        const appId = app?.id ?? null;
-        // Remove the appId if present
-        const index = pinned.indexOf(appId);
 
-        if (index !== -1) {
-            pinned.splice(index, 1);
+        // Determine the set of IDs that should remain pinned. We assume each app
+        // object has a unique `id` property.
+        const currentPinnedIds = this.getPinnedApps().map((a: any) => a.id);
+
+        // Filter the stored IDs, keeping only those that exist in the current list.
+        var filteredIds = storedIds.filter(id => currentPinnedIds.includes(id));
+        filteredIds = filteredIds.filter((id: any) => id != app.id);
+
+        // Persist the cleaned list back to localStorage.
+        localStorage.setItem('pinnedApps', JSON.stringify(filteredIds));
+
+        // If Dexie is being used for a pinnedApps table, remove any entries that
+        // are no longer present.
+        if (this.db && this.db.pinnedApps) {
+            // Delete records whose id is not in the filtered list.
+            this.db.pinnedApps
+                .where('id')
+                .noneOf(filteredIds)
+                .delete()
+                .catch((e: any) => console.error('Error cleaning up Dexie pinnedApps', e));
         }
-        // Save the updated list back to localStorage
-        localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+
+        // Refresh UI filters to reflect the change.
         this.resetAppFilter();
     }
 
+    // Ensure proper spacing before the next member as per coding conventions
     menuPosition = { x: '0px', y: '0px' };
 
     /** Handle right‑click on an app tile to show the context menu */
@@ -1383,6 +1394,10 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
+
+
 
 
 
