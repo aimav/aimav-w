@@ -26,10 +26,13 @@ import { RouterOutlet } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { sha1 } from '../modules/common.js';
 
+import IgSync from '../libs/igsync/igsync';
+
 var log = console.log;
 // Streaming guide: https://openrouter.ai/openrouter/free
 const CURRENT_MODEL = "openrouter/free";
 const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
+const G_APP_API_KEY = "AIzaSyBbCJzvgQ7UTyhSLc6Ae4-XUP7Slvi3coo";
 
 // Legacy reference to the old RxDB schemas:
 const RXDB_SCHEMAS = {
@@ -574,6 +577,8 @@ export class App implements OnDestroy {
         this.resetClearTimer();
     }
 
+    igSync: IgSync | null = null;
+
     // Sync indexeddb to google drive
     async syncNow(event: Event) {
         await this.signInWithGoogle();
@@ -585,7 +590,11 @@ export class App implements OnDestroy {
             return;
         }
 
-        this.msgBox.showMsg("todo: Use IgSync lib");
+        var igSync = new IgSync();
+        this.igSync = igSync;
+        // @ts-ignore
+        await igSync.init(G_APP_CLIENT_ID, G_APP_API_KEY, window.gAccessToken);
+        await igSync.sync("AimavDB");
     }
 
     /**

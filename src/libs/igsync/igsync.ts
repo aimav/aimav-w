@@ -1,6 +1,10 @@
+// Shorthands
+var log = console.log;
+
 // indexeddb-gdrive sync lib
 class IgSync {
     private _clientId: string = "";
+    private _apiKey: string = "";
     private _accessToken: string = "";
 
     /**
@@ -10,6 +14,7 @@ class IgSync {
      * @returns A promise that resolves with the created folder information.
      */
     /**
+     * MANUALLY CHECKED.
      * Create a new folder in Google Drive.
      *
      * @param path - The absolute path in Google Drive where the folder should be created (e.g. "/MyApp/Data"). Must start with '/'.
@@ -21,20 +26,24 @@ class IgSync {
         if (!(window as any).gapi) {
             throw new Error('gapi client not loaded');
         }
-
         // Initialise the client with the stored credentials.
-        await (window as any).gapi.client.init({
-            apiKey: this._clientId,
-            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-        });
+        try {
+            await (window as any).gapi.client.init({
+                apiKey: this._apiKey,
+                discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+            });
+        }
+        catch (err) {
+            log(JSON.stringify(err));
+        }
         await (window as any).gapi.client.setToken({
             access_token: this._accessToken
         });
-
         // Helper to find a folder ID by path.
         const findFolderId = async (folderPath: string): Promise<string> => {
             const parts = folderPath.split('/').filter(p => p.length > 0);
             let parentId = 'root';
+
             for (const part of parts) {
                 const response = await (window as any).gapi.client.drive.files.list({
                     q: `'${parentId}' in parents and name = '${part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
@@ -59,8 +68,22 @@ class IgSync {
             }
             return parentId;
         };
-
         const parentId = await findFolderId(path);
+
+        if (parentId == "root") {
+            const response = await (window as any).gapi.client.drive.files.list({
+                q: `'${parentId}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+                fields: 'files(id, name)',
+                spaces: 'drive',
+            });
+            const files = response.result.files;
+            if (!files || files.length === 0) { }
+            else {
+                log("Folder exists:", path, name);
+                return;
+            }
+        }
+
         // Create the final folder.
         const result = await (window as any).gapi.client.drive.files.create({
             resource: {
@@ -74,12 +97,7 @@ class IgSync {
     }
 
     /**
-     * Retrieve information about a folder.
-     *
-     * @param id - The ID of the folder to retrieve.
-     * @returns A promise that resolves with the folder metadata.
-     */
-    /**
+     * MANUALLY CHECKED.
      * Retrieve information about a folder given its absolute path.
      *
      * @param path - The absolute path to the folder (e.g. "/MyApp/Data"). Must start with '/'.
@@ -93,7 +111,7 @@ class IgSync {
 
         // Initialise the client with stored credentials.
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({
@@ -147,7 +165,7 @@ class IgSync {
 
         // Initialise the client with stored credentials.
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({
@@ -214,7 +232,7 @@ class IgSync {
 
         // Initialise the client with stored credentials.
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({
@@ -271,7 +289,7 @@ class IgSync {
 
         // Initialise the client with stored credentials.
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({
@@ -307,18 +325,57 @@ class IgSync {
     }
 
     /**
+     * MANUALLY CHECKED.
      * Initialize the IgSync instance with the OAuth client ID and an access token.
      *
      * @param clientId - The OAuth client ID obtained from Google Cloud Console.
      * @param accessToken - The OAuth access token used for authenticated API calls.
      */
-    init(clientId: string, accessToken: string): void {
+    // Initialize the IgSync instance with the OAuth client ID and an access token.
+    // Additionally, ensure the required folder structure exists on Google Drive.
+    async init(clientId: string, apiKey: string, accessToken: string): Promise<void> {
         // Store the client ID and access token for later use when loading the Google API client.
         this._clientId = clientId;
+        this._apiKey = apiKey;
         this._accessToken = accessToken;
+
+        // Create the top‑level "Aimav" folder if it does not exist.
+        // The createFolder method is idempotent – it will return the existing folder if present.
+        await this.createFolder('/', 'Aimav');
+
+        if (localStorage['deviceId'] == null) {
+            // @ts-ignore
+            localStorage['deviceId'] = new_id();
+        }
+
+        // Ensure a device configuration file exists in Google Drive under
+        // "/Aimav/Devices/${deviceId}.json". The file should contain a JSON
+        // object with an empty `objectsToLoad` array. This file is used by the
+        // sync logic to know which objects need to be loaded for the device.
+        const deviceId = localStorage['deviceId'] as string;
+        // Resolve the folder ID for the Devices directory.
+        const devicesFolderInfo = await this.getFolderInfo('/Aimav');
+        const folderId = devicesFolderInfo.id;
+        const fileName = `device-${deviceId}.json`;
+        try {
+            // Attempt to read the file – if it exists we are done.
+            await this.readFile(folderId, fileName);
+        } catch (e) {
+            // File does not exist; create it with the default content.
+            await this.createFile(folderId, fileName);
+            const defaultContent = JSON.stringify({ objectsToLoad: [] }, null, 4);
+            await this.writeFile(folderId, fileName, defaultContent);
+        }
+    }
+
+    //
+    async sync(dbName: string) {
+        var deviceId = localStorage['deviceId'];
+        // TODO: implement synchronization logic using deviceId
     }
 
     /**
+     * MANUALLY CHECKED.
      * Create a new file in a folder.
      * @param folderId - The ID of the parent folder.
      * @param fileName - The name of the file to create.
@@ -329,7 +386,7 @@ class IgSync {
             throw new Error('gapi client not loaded');
         }
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({ access_token: this._accessToken });
@@ -355,7 +412,7 @@ class IgSync {
             throw new Error('gapi client not loaded');
         }
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({ access_token: this._accessToken });
@@ -389,7 +446,7 @@ class IgSync {
             throw new Error('gapi client not loaded');
         }
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({ access_token: this._accessToken });
@@ -413,6 +470,7 @@ class IgSync {
     }
 
     /**
+     * MANUALLY CHECKED.
      * Write content to a file (creates or updates).
      * @param folderId - The ID of the parent folder.
      * @param fileName - The name of the file.
@@ -423,34 +481,72 @@ class IgSync {
             throw new Error('gapi client not loaded');
         }
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
-        await (window as any).gapi.client.setToken({ access_token: this._accessToken });
+        (window as any).gapi.client.setToken({ access_token: this._accessToken });
 
-        // Find existing file or create a new one.
+        // Find existing file
         const listRes = await (window as any).gapi.client.drive.files.list({
             q: `'${folderId}' in parents and name = '${fileName}' and trashed = false`,
             fields: 'files(id)',
             spaces: 'drive',
         });
         const files = listRes.result.files;
-        const media = { body: contentString };
-        if (files && files.length > 0) {
-            const fileId = files[0].id;
-            const updateRes = await (window as any).gapi.client.drive.files.update({
-                fileId,
-                media,
-                fields: 'id, name',
-            });
-            return updateRes.result;
-        } else {
-            const createRes = await (window as any).gapi.client.drive.files.create({
-                resource: { name: fileName, parents: [folderId] },
-                media,
-                fields: 'id, name',
-            });
-            return createRes.result;
+
+        const mimeType = 'text/plain'; // change if needed
+        const metadataCreate = { name: fileName, parents: [folderId] };
+        const metadataUpdate = { name: fileName };
+
+        // Construct multipart body manually
+        const boundary = '-------314159265358979323846';
+        const delimiter = `\r\n--${boundary}\r\n`;
+        const closeDelimiter = `\r\n--${boundary}--`;
+
+        const multipartBodyCreate =
+            delimiter +
+            'Content-Type: application/json\r\n\r\n' +
+            JSON.stringify(metadataCreate) +
+            delimiter +
+            `Content-Type: ${mimeType}\r\n\r\n` +
+            contentString +
+            closeDelimiter;
+        const multipartBodyUpdate =
+            delimiter +
+            'Content-Type: application/json\r\n\r\n' +
+            JSON.stringify(metadataUpdate) +
+            delimiter +
+            `Content-Type: ${mimeType}\r\n\r\n` +
+            contentString +
+            closeDelimiter;
+
+        try {
+            if (files && files.length > 0) {
+                // Update existing file
+                const fileId = files[0].id;
+                const res = await (window as any).gapi.client.request({
+                    path: `/upload/drive/v3/files/${fileId}`,
+                    method: 'PATCH',
+                    params: { uploadType: 'multipart', fields: 'id, name' },
+                    headers: { 'Content-Type': `multipart/related; boundary="${boundary}"` },
+                    body: multipartBodyUpdate,
+                });
+                return res.result;
+            } else {
+                // Create new file
+                const res = await (window as any).gapi.client.request({
+                    path: '/upload/drive/v3/files',
+                    method: 'POST',
+                    params: { uploadType: 'multipart', fields: 'id, name' },
+                    headers: { 'Content-Type': `multipart/related; boundary="${boundary}"` },
+                    body: multipartBodyCreate,
+                });
+                return res.result;
+            }
+        }
+        catch (e) {
+            console.log("igsync.writeFile:", JSON.stringify(e));
+            throw e;
         }
     }
 
@@ -464,7 +560,7 @@ class IgSync {
             throw new Error('gapi client not loaded');
         }
         await (window as any).gapi.client.init({
-            apiKey: this._clientId,
+            apiKey: this._apiKey,
             discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
         });
         await (window as any).gapi.client.setToken({ access_token: this._accessToken });
