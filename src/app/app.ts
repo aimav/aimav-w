@@ -451,15 +451,28 @@ export class App implements OnDestroy {
         var finalList = pins.concat(customApps);
 
         for (let app of finalList)
-            if (app.id == null)
-                // @ts-ignore
-                app.id = window.new_id();
+            // @ts-ignore
+            app.id = window.new_id();
 
         (async () => {
             // Sync Dexie pinnedApps table with the current list.
             if (this.db && this.db.pinnedApps) {
-                await this.db.pinnedApps.clear();
-                await this.db.pinnedApps.bulkAdd(finalList);
+                // Insert each app from finalList into the pinnedApps object store
+                // only if an entry with the same URL does not already exist.
+                for (const app of finalList) {
+                    try {
+                        const existing = await this.db.pinnedApps
+                            .where('url')
+                            .equals(app.url)
+                            .first();
+                        if (!existing) {
+                            // Ensure required fields are present; Dexie will generate an id if missing.
+                            await this.db.pinnedApps.add(app);
+                        }
+                    } catch (e) {
+                        console.error('Error syncing pinned app', app, e);
+                    }
+                }
             }
         })();
 
