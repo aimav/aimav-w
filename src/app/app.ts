@@ -2,24 +2,8 @@ import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
 import { SelectBoxComponent } from '../modules/selectbox';
 
-import { createRxDatabase, addRxPlugin } from 'rxdb';
-import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
-import { replicateGoogleDrive } from 'rxdb/plugins/replication-google-drive';
-import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
-addRxPlugin(RxDBUpdatePlugin);
-
-import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
-addRxPlugin(RxDBMigrationSchemaPlugin);
-
-import { RxDBCleanupPlugin } from 'rxdb/plugins/cleanup';
-addRxPlugin(RxDBCleanupPlugin);
-
-import { RxDBLeaderElectionPlugin } from 'rxdb/plugins/leader-election';
-addRxPlugin(RxDBLeaderElectionPlugin);
-
-import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
-addRxPlugin(RxDBDevModePlugin);
-import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+// RxDB imports removed – Dexie will be used instead
+import { AppDexie } from './dexie-db';
 
 // Create a singleton instance
 // const db = new AimavDB();
@@ -47,6 +31,7 @@ var log = console.log;
 const CURRENT_MODEL = "openrouter/free";
 const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
 
+// Legacy reference to the old RxDB schemas:
 const RXDB_SCHEMAS = {
     chatMessages: {
         migrationStrategies: {
@@ -252,13 +237,10 @@ export class App implements OnDestroy {
         }
         // Query categories where categoryName starts with the selected letter
         const docs = await this.db.appCategories
-            .find({
-                selector: {
-                    categoryName: { $regex: '^' + lower, $options: 'i' }
-                },
-                limit: 100
-            })
-            .exec();
+            .where('categoryName')
+            .startsWithIgnoreCase(lower)
+            .limit(100)
+            .toArray();
         const options: { [key: string]: string } = {};
 
         function uppercaseWords(str: string): string {
@@ -291,12 +273,9 @@ export class App implements OnDestroy {
                 // Find the category document where categoryName matches the selectedCategory
                 try {
                     const catDoc = await this.db.appCategories
-                        .findOne({
-                            selector: {
-                                categoryName: { $eq: selectedCategory }
-                            }
-                        })
-                        .exec();
+                        .where('categoryName')
+                        .equals(selectedCategory)
+                        .first();
                     if (catDoc && catDoc.apps) {
                         // Update the appsInCategory signal with the apps from the category
                         // Ensure apps are sorted for consistent display
@@ -477,15 +456,10 @@ export class App implements OnDestroy {
                 app.id = window.new_id();
 
         (async () => {
-            // Empty out the RxDB pinnedApps collection and repopulate it with the current list.
-            // This is done asynchronously and any errors are logged but do not block the return.
+            // Sync Dexie pinnedApps table with the current list.
             if (this.db && this.db.pinnedApps) {
-                // Remove all existing documents in the pinnedApps collection.
-                await this.db.pinnedApps.find().remove();
-                await this.db.pinnedApps.cleanup(0);
-
-                // Insert the updated list into the collection.
-                await this.db.pinnedApps.bulkInsert(finalList);
+                await this.db.pinnedApps.clear();
+                await this.db.pinnedApps.bulkAdd(finalList);
             }
         })();
 
@@ -613,7 +587,7 @@ export class App implements OnDestroy {
         this.resetClearTimer();
     }
 
-
+    // Sync indexeddb to google drive
     async syncNow(event: Event) {
         await this.signInWithGoogle();
 
@@ -623,40 +597,9 @@ export class App implements OnDestroy {
                 "click Sync Data to authenticate with Google Drive.");
             return;
         }
-        var stores = Object.keys(RXDB_SCHEMAS);
 
-        for (let store of stores) {
-            log("Synchronising " + store);
-            this.toast.info("Synchronising " + store);
-            const replicationState = await replicateGoogleDrive({
-                replicationIdentifier: `aimav-${store}`,
-                collection: this.db[store], // RxCollection
-                googleDrive: {
-                    oauthClientId: G_APP_CLIENT_ID,
-                    // @ts-ignore
-                    authToken: window.gAccessToken, // USER_ACCESS_TOKEN
-                    folderPath: `Aimav/${store}`
-                },
-                live: false, // Do full sync once when user clicks Sync Data
-                pull: {
-                    batchSize: 60,
-                    modifier: doc => doc // (optional) modify invalid data
-                },
-                push: {
-                    batchSize: 60,
-                    modifier: doc => doc // (optional) modify before sending
-                }
-            });
-
-            // Observe replication states
-            replicationState.error$.subscribe(err => {
-                console.error('Replication error:', err);
-            });
-            await replicationState.awaitInitialReplication();
-        }
-        this.toast.success("Synchronization completed");
+        this.msgBox.showMsg("todo: Use IgSync lib");
     }
-
 
     /**
      * Load and display stored chat history from RxDB.
@@ -666,20 +609,14 @@ export class App implements OnDestroy {
      */
     public async showChatHistory(): Promise<void> {
         if (!this.db) {
-            console.error('RxDB instance not initialized');
+            console.error('Dexie DB not initialized');
             return;
         }
         try {
             const year: number = new Date().getFullYear();
-            const docs = await this.db.chatMessages.find({
-                selector: { year: year },
-                index: ['year']
-            }).exec();
+            const docs = await this.db.chatMessages.where('year').equals(year).toArray();
             let html = "<u>Recent Messages:</u> <br>";
             let count = 0;
-
-            // Optionally clear previous entries except intro info
-            // Append each year's messages
             for (const doc of docs) {
                 for (const msg of doc.messages) {
                     html += `•\x20${msg.content}<br/>`;
@@ -690,9 +627,8 @@ export class App implements OnDestroy {
             }
             if (count === 0) html += "(No messages yet)<br/>";
             this.msgBox.showMsg(html);
-        }
-        catch (e) {
-            console.error('Failed to load chat history from RxDB', e);
+        } catch (e) {
+            console.error('Failed to load chat history from Dexie', e);
         }
     }
 
@@ -766,31 +702,26 @@ export class App implements OnDestroy {
 
         // Find the category document matching the selected category name
         const catDoc = await this.db.appCategories
-            .findOne({ selector: { categoryName: { $eq: selectedCategory } } })
-            .exec();
+            .where('categoryName')
+            .equals(selectedCategory)
+            .first();
 
         if (!catDoc) {
             this.toast.info(`Category ${selectedCategory} not found`);
             return;
         }
-
         if (!catDoc.apps || catDoc.apps.length === 0) {
             this.toast.info(`No apps in category ${selectedCategory}`);
             return;
         }
-
-        // Find index of app with matching URL
         const index = catDoc.apps.findIndex((a: any) => a.url === app.url);
-
         if (index === -1) {
             this.toast.info('App not found in selected category');
             return;
         }
-
-        // Remove the app from the array and patch the document
         const newApps = catDoc.apps.slice();
         newApps.splice(index, 1);
-        await catDoc.patch({ apps: newApps });
+        await this.db.appCategories.put({ ...catDoc, apps: newApps });
         this.toast.info(`Removed app from ${selectedCategory}`);
     }
 
@@ -821,13 +752,11 @@ export class App implements OnDestroy {
         const normalized = newName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
 
         // Find the existing category document
+        // Dexie does not support findOne; use where + equals + first() to fetch the document
         const catDoc = await this.db.appCategories
-            .findOne({
-                selector: {
-                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
-                }
-            })
-            .exec();
+            .where('categoryName')
+            .equals(this.selectedCategory.toLowerCase())
+            .first();
 
         if (!catDoc) {
             this.toast.info(`Category ${this.selectedCategory} not found`);
@@ -836,7 +765,8 @@ export class App implements OnDestroy {
         }
 
         // Update the categoryName field
-        await catDoc.patch({ categoryName: normalized });
+        // Dexie collection documents do not have a .patch() method. Use the table's update method instead.
+        await this.db.appCategories.update(catDoc.id, { categoryName: normalized });
         // Update UI state
         this.selectedCategory = newName;
         this.toast.success('Category name updated');
@@ -862,13 +792,11 @@ export class App implements OnDestroy {
         }
 
         // Find the existing category document
+        // Dexie does not support findOne; use where + equals + first()
         const catDoc = await this.db.appCategories
-            .findOne({
-                selector: {
-                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
-                }
-            })
-            .exec();
+            .where('categoryName')
+            .equals(this.selectedCategory.toLowerCase())
+            .first();
 
         if (!catDoc) {
             this.toast.info(`Category ${this.selectedCategory} not found`);
@@ -876,8 +804,8 @@ export class App implements OnDestroy {
             return;
         }
 
-        // Del
-        await catDoc.remove();
+        // Delete the category document using Dexie's delete method
+        await this.db.appCategories.delete(catDoc.id);
         // Update UI state
         this.selectedCategory = "";
         this.toast.success('Category deleted');
@@ -899,11 +827,12 @@ export class App implements OnDestroy {
         if (useExisting === 'yes') {
             // Retrieve all category names from RxDB
             if (!this.db || !this.db.appCategories) {
-                console.error('RxDB not initialized or appCategories collection missing');
+                console.error('Dexie DB not initialized or appCategories table missing');
                 this.toggleApps();
                 return;
             }
-            const docs = await this.db.appCategories.find().exec();
+            // Dexie does not have a .find() method; retrieve all category documents via toArray()
+            const docs = await this.db.appCategories.toArray();
             const options: { [key: string]: string } = {};
             docs.forEach((doc: any) => {
                 const name = (doc.categoryName as string).toLowerCase();
@@ -941,7 +870,11 @@ export class App implements OnDestroy {
         categoryName = categoryName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
 
         // Find existing category document
-        const existing = await this.db.appCategories.findOne({ selector: { categoryName } }).exec();
+        // Dexie does not support findOne; use where + equals + first()
+        const existing = await this.db.appCategories
+            .where('categoryName')
+            .equals(categoryName)
+            .first();
         const appInfo = { idstr: app.id, name: app.name, url: app.url, icon: app.icon };
         log(existing)
         log(appInfo)
@@ -954,21 +887,24 @@ export class App implements OnDestroy {
             const already = existing.apps.find((a: any) => a.idstr === app.id);
 
             if (!already) {
-                // existing.apps.push(appInfo);
-                await existing.patch({
+                // Update the existing document by adding the new appInfo to the apps array.
+                // Dexie does not provide a .patch() method; use the table's .update() instead.
+                await this.db.appCategories.update(existing.id, {
                     apps: [...existing.apps, appInfo]
                 });
 
-                // Update tokens for search (simple tokenization)
-                // existing.tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
-                // await existing.save();
+                // Optionally, update the search tokens as well.
+                // await this.db.appCategories.update(existing.id, {
+                //     tokens: this.tokenize(`${categoryName} ${app.name} ${app.url}`)
+                // });
             }
         }
         else {
             // Create new category document
             const id = (window as any).new_id ? (window as any).new_id() : `${Date.now()}`;
             const tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
-            await this.db.appCategories.insert({
+            // Dexie uses add for inserting new records into a table.
+            await this.db.appCategories.add({
                 id,
                 categoryName,
                 tokens,
@@ -1234,24 +1170,29 @@ export class App implements OnDestroy {
             };
 
             // Attempt to fetch an existing year record using RxDB query
-            const existingDoc = await this.db.chatMessages.findOne({
-                selector: { year: currentYear }
-            }).exec();
+            // Dexie does not support findOne; use where().equals().first() to fetch the record for the current year
+            const existingDoc = await this.db.chatMessages.where('year').equals(currentYear).first();
 
             if (existingDoc) {
-                const msgs = existingDoc.get('messages') as any[];
+                // Dexie returns plain objects; access fields directly
+                const msgs = (existingDoc as any).messages as any[];
                 const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
                 // Update tokens field by appending tokens from the new message
-                const existingTokens = existingDoc.get('tokens') as any[] || [];
+                const existingTokens = (existingDoc as any).tokens as any[] || [];
                 const updatedTokens = Array.isArray(existingTokens) ? [...existingTokens, ...tokenArray] : [...tokenArray];
-                await existingDoc.update({ $set: { messages: updatedMsgs, tokens: updatedTokens } });
+                // Use Dexie's modify to update the existing record
+                await this.db.chatMessages.where('year').equals(currentYear).modify({
+                    messages: updatedMsgs,
+                    tokens: updatedTokens
+                });
             }
             else {
                 // No record for this year yet – insert a new document
                 // Generate a unique id for the document (e.g., using timestamp and year)
                 // @ts-ignore
                 const docId = window.new_id();
-                await this.db.chatMessages.insert({
+                // Dexie uses add/put for inserting new records. Use add to create a new document.
+                await this.db.chatMessages.add({
                     id: docId,
                     year: currentYear,
                     messages: [newMsg],
@@ -1415,16 +1356,8 @@ export class App implements OnDestroy {
         // Sort apps: internal apps first, then alphabetically by name
         this.apps = this.sortApps(this.apps);
 
-        const storageWithValidation = wrappedValidateAjvStorage({
-            storage: getRxStorageDexie()
-        });
-        // Initialise RxDB and store the instance on the component for later use
-        this.db = await createRxDatabase({
-            name: 'aimav',
-            storage: storageWithValidation
-        });
-
-        await this.db.addCollections(RXDB_SCHEMAS);
+        // Initialise Dexie database instance
+        this.db = new AppDexie();
     }
 
     /**
