@@ -343,10 +343,76 @@ class IgSync {
         }
     }
 
+    // Mark a changed object
+    // Stores entries in localStorage.changedObjects as an object for O(1) existence checks.
+    // The object keys are a composite string "${dbName}|${storeName}|${id}" and the value is true.
+    markChanged(dbName: string, storeName: string, id: string, op: string = "modified") {
+        // Retrieve existing map or initialise a new one.
+        let changedMap: Record<string, string> = {};
+        try {
+            const raw = localStorage['changedObjects'];
+            if (raw) {
+                changedMap = JSON.parse(raw);
+            }
+        } catch (e) {
+            // If parsing fails, start with an empty map.
+            changedMap = {};
+        }
+
+        const key = `${dbName}/${storeName}/${id}`;
+        if (!changedMap[key]) {
+            changedMap[key] = op;
+            localStorage['changedObjects'] = JSON.stringify(changedMap);
+        }
+    }
+
+    //
+    markDeleted(dbName: string, storeName: string, id: string) {
+        this.markChanged(dbName, storeName, id, "deleted");
+    }
+
+    //  
+    // Synchronize data from the cloud for a specific device.
+    // Reads the device configuration file from Google Drive and logs each entry
+    // in the `objectsToLoad` array.
+    async syncFromCloud(deviceId: string) {
+        // Resolve the folder information for the top-level Aimav folder.
+        const folderInfo = await this.getFolderInfo('/Aimav');
+        const folderId = folderInfo.id;
+        const fileName = `device-${deviceId}.json`;
+
+        // Read the file content as a string.
+        const fileContent = await this.readFile(folderId, fileName);
+        let jsonObj: any;
+        try {
+            jsonObj = JSON.parse(fileContent);
+        } catch (e) {
+            console.error('Failed to parse JSON from', fileName, e);
+            return;
+        }
+
+        const objects = jsonObj.objectsToLoad;
+        log("objects to load:", objects.length);
+
+        if (Array.isArray(objects)) {
+            for (const obj of objects) {
+                console.log('Object to load:', obj);
+            }
+        } else {
+            console.warn('objectsToLoad is not an array in', fileName);
+        }
+    }
+
+    // 
+    async syncToCloud(deviceId: string) {
+    }
+
     //
     async sync(dbName: string) {
         var deviceId = localStorage['deviceId'];
         // TODO: implement synchronization logic using deviceId
+        await this.syncFromCloud(deviceId);
+        await this.syncToCloud(deviceId);
     }
 
     /**

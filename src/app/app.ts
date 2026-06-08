@@ -33,6 +33,7 @@ var log = console.log;
 const CURRENT_MODEL = "openrouter/free";
 const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
 const G_APP_API_KEY = "AIzaSyBbCJzvgQ7UTyhSLc6Ae4-XUP7Slvi3coo";
+const DB_NAME = "AimavDB";
 
 // Legacy reference to the old RxDB schemas:
 const RXDB_SCHEMAS = {
@@ -191,6 +192,7 @@ export class App implements OnDestroy {
     @ViewChild('promptBox') promptBox!: PromptBoxComponent;
     // Alphabet array for navigation buttons
     alphabet: string[] = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+    igSync: IgSync = new IgSync();
 
     /**
      * Navigate to home view.
@@ -577,8 +579,6 @@ export class App implements OnDestroy {
         this.resetClearTimer();
     }
 
-    igSync: IgSync | null = null;
-
     // Sync indexeddb to google drive
     async syncNow(event: Event) {
         await this.signInWithGoogle();
@@ -590,11 +590,13 @@ export class App implements OnDestroy {
             return;
         }
 
-        var igSync = new IgSync();
-        this.igSync = igSync;
+        const igSync = this.igSync;
+        this.toast.info("Initializing Google Drive...");
         // @ts-ignore
         await igSync.init(G_APP_CLIENT_ID, G_APP_API_KEY, window.gAccessToken);
-        await igSync.sync("AimavDB");
+
+        this.toast.info("Syncing data with Google Drive...");
+        await igSync.sync(DB_NAME);
     }
 
     /**
@@ -718,6 +720,8 @@ export class App implements OnDestroy {
         const newApps = catDoc.apps.slice();
         newApps.splice(index, 1);
         await this.db.appCategories.put({ ...catDoc, apps: newApps });
+        this.igSync.markChanged(DB_NAME, "appCategories", catDoc.id);
+
         this.toast.info(`Removed app from ${selectedCategory}`);
     }
 
@@ -763,6 +767,8 @@ export class App implements OnDestroy {
         // Update the categoryName field
         // Dexie collection documents do not have a .patch() method. Use the table's update method instead.
         await this.db.appCategories.update(catDoc.id, { categoryName: normalized });
+        this.igSync.markChanged(DB_NAME, "appCategories", catDoc.id);
+
         // Update UI state
         this.selectedCategory = newName;
         this.toast.success('Category name updated');
@@ -802,6 +808,8 @@ export class App implements OnDestroy {
 
         // Delete the category document using Dexie's delete method
         await this.db.appCategories.delete(catDoc.id);
+        this.igSync.markChanged(DB_NAME, "appCategories", catDoc.id, "deleted");
+
         // Update UI state
         this.selectedCategory = "";
         this.toast.success('Category deleted');
@@ -888,6 +896,7 @@ export class App implements OnDestroy {
                 await this.db.appCategories.update(existing.id, {
                     apps: [...existing.apps, appInfo]
                 });
+                this.igSync.markChanged(DB_NAME, "appCategories", existing.id);
 
                 // Optionally, update the search tokens as well.
                 // await this.db.appCategories.update(existing.id, {
@@ -906,6 +915,7 @@ export class App implements OnDestroy {
                 tokens,
                 apps: [appInfo]
             });
+            this.igSync.markChanged(DB_NAME, "appCategories", id);
         }
         this.toggleApps();
     }
@@ -966,6 +976,7 @@ export class App implements OnDestroy {
                     if (!existing) {
                         // Dexie will generate an id if not provided.
                         await this.db.pinnedApps.add(app);
+                        this.igSync.markChanged(DB_NAME, "pinnedApps", app.id);
                     }
                     log("pinned");
                 } catch (e) {
@@ -1014,6 +1025,7 @@ export class App implements OnDestroy {
                 .noneOf(filteredIds)
                 .delete()
                 .catch((e: any) => console.error('Error cleaning up Dexie pinnedApps', e));
+            this.igSync.markDeleted(DB_NAME, "pinnedApps", app.id);
         }
 
         // Refresh UI filters to reflect the change.
@@ -1218,6 +1230,7 @@ export class App implements OnDestroy {
                     messages: updatedMsgs,
                     tokens: updatedTokens
                 });
+                this.igSync.markChanged(DB_NAME, "chatMessages", existingDoc.id);
             }
             else {
                 // No record for this year yet – insert a new document
@@ -1231,6 +1244,7 @@ export class App implements OnDestroy {
                     messages: [newMsg],
                     tokens: tokenArray
                 });
+                this.igSync.markChanged(DB_NAME, "chatMessages", docId);
             }
         }
         catch (e) {
@@ -1391,6 +1405,8 @@ export class App implements OnDestroy {
 
         // Initialise Dexie database instance
         this.db = new AppDexie();
+
+        this.msgBox.showMsg("You should click Sync Data now to get data modified on other devices");
     }
 
     /**
