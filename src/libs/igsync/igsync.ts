@@ -3,6 +3,7 @@ var log = console.log;
 
 // indexeddb-gdrive sync lib
 class IgSync {
+    private _app: any;
     private _clientId: string = "";
     private _apiKey: string = "";
     private _accessToken: string = "";
@@ -308,7 +309,8 @@ class IgSync {
      */
     // Initialize the IgSync instance with the OAuth client ID and an access token.
     // Additionally, ensure the required folder structure exists on Google Drive.
-    async init(clientId: string, apiKey: string, accessToken: string): Promise<void> {
+    async init(app: any, clientId: string, apiKey: string, accessToken: string): Promise<void> {
+        this._app = app;
         // Store the client ID and access token for later use when loading the Google API client.
         this._clientId = clientId;
         this._apiKey = apiKey;
@@ -405,13 +407,73 @@ class IgSync {
 
     // 
     async syncToCloud(deviceId: string) {
+        // Resolve the top‑level Aimav folder.
+        const folderInfo = await this.getFolderInfo('/Aimav');
+        const folderId = folderInfo.id;
+
+        // List all JSON files in the Aimav folder.
+        const listRes = await (window as any).gapi.client.drive.files.list({
+            q: `'${folderId}' in parents and mimeType = 'application/json' and trashed = false`,
+            fields: 'files(id, name)',
+            spaces: 'drive',
+        });
+        const files = listRes.result.files || [];
+
+        // Load changed objects map from localStorage.
+        let changedMap: Record<string, string> = {};
+        try {
+            const raw = localStorage['changedObjects'];
+            if (raw) changedMap = JSON.parse(raw);
+        } catch (e) {
+            console.warn('Failed to parse changedObjects', e);
+        }
+
+        // Prepare entries to add: {id, op}
+        const changedEntries = Object.entries(changedMap).map(([key, op]) => {
+            const parts = key.split('/');
+            const id = parts[parts.length - 1];
+            return { id, op };
+        });
+
+        // Process each JSON file except the device config file.
+        for (const file of files) {
+            if (!file.name.endsWith('.json')) continue;
+            if (file.name === `device-${deviceId}.json`) continue;
+
+            // Read file content.
+            const content = await this.readFile(folderId, file.name);
+            let jsonObj: any;
+            try {
+                jsonObj = JSON.parse(content);
+            } catch (e) {
+                console.error('Failed to parse JSON from', file.name, e);
+                continue;
+            }
+
+            // Ensure objectsToLoad array exists.
+            if (!Array.isArray(jsonObj.objectsToLoad)) {
+                jsonObj.objectsToLoad = [];
+            }
+
+            // Append changed entries, avoiding duplicates.
+            for (const entry of changedEntries) {
+                if (!jsonObj.objectsToLoad.some((o: any) => o.id === entry.id && o.op === entry.op)) {
+                    jsonObj.objectsToLoad.push(entry);
+                }
+            }
+
+            // Write back updated content.
+            const newContent = JSON.stringify(jsonObj, null, 4);
+            await this.writeFile(folderId, file.name, newContent);
+        }
     }
 
     //
     async sync(dbName: string) {
         var deviceId = localStorage['deviceId'];
-        // TODO: implement synchronization logic using deviceId
+        this._app.toast.info("Syncing data from Google Drive...");
         await this.syncFromCloud(deviceId);
+        this._app.toast.info("Syncing data to Google Drive...");
         await this.syncToCloud(deviceId);
     }
 

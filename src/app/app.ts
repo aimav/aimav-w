@@ -593,7 +593,7 @@ export class App implements OnDestroy {
         const igSync = this.igSync;
         this.toast.info("Initializing Google Drive...");
         // @ts-ignore
-        await igSync.init(G_APP_CLIENT_ID, G_APP_API_KEY, window.gAccessToken);
+        await igSync.init(this, G_APP_CLIENT_ID, G_APP_API_KEY, window.gAccessToken);
 
         this.toast.info("Syncing data with Google Drive...");
         await igSync.sync(DB_NAME);
