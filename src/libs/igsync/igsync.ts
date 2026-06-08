@@ -8,12 +8,6 @@ class IgSync {
     private _accessToken: string = "";
 
     /**
-     * Create a new folder.
-     *
-     * @param name - The name of the folder to create.
-     * @returns A promise that resolves with the created folder information.
-     */
-    /**
      * MANUALLY CHECKED.
      * Create a new folder in Google Drive.
      *
@@ -146,12 +140,6 @@ class IgSync {
     }
 
     /**
-     * Retrieve a folder and its items (files/sub‑folders).
-     *
-     * @param id - The ID of the folder to retrieve.
-     * @returns A promise that resolves with the folder and its children.
-     */
-    /**
      * Retrieve a folder and its items given the folder's absolute path.
      *
      * @param path - The absolute path to the folder (e.g. "/MyApp/Data"). Must start with '/'.
@@ -211,13 +199,6 @@ class IgSync {
     }
 
     /**
-     * Update the name of an existing folder.
-     *
-     * @param id - The ID of the folder to rename.
-     * @param newName - The new name for the folder.
-     * @returns A promise that resolves when the update is complete.
-     */
-    /**
      * Update the name of an existing folder given its absolute path.
      *
      * @param path - The absolute path to the folder (e.g. "/MyApp/Data"). Must start with '/'.
@@ -269,12 +250,6 @@ class IgSync {
         return response.result;
     }
 
-    /**
-     * Delete a folder.
-     *
-     * @param id - The ID of the folder to delete.
-     * @returns A promise that resolves when the folder has been removed.
-     */
     /**
      * Delete a folder given its absolute path.
      *
