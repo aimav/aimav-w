@@ -58,6 +58,8 @@ export class AppDexie extends Dexie {
     pinnedApps!: Table<PinnedApp, string>;
     appCategories!: Table<AppCategory, string>;
     customApps!: Table<CustomApp, string>;
+    // New table to store directory handles for data folders
+    dataFolders!: Table<DataFolder, string>;
 
     constructor() {
         super('AimavDB');
@@ -66,7 +68,16 @@ export class AppDexie extends Dexie {
             notes: 'id, year, *tokens',
             pinnedApps: 'id, name, url, *tokens',
             appCategories: 'id, categoryName, *tokens',
-            customApps: 'id, name, url, *tokens'
+            customApps: 'id, name, url, *tokens',
+            dataFolders: 'id'
         });
     }
+}
+
+// Interface representing a stored data folder handle
+export interface DataFolder {
+    // Use the directory handle's name as primary key
+    id: string;
+    // The actual FileSystemDirectoryHandle (stored via structured clone)
+    handle: any;
 }

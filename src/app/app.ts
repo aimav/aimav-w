@@ -678,9 +678,85 @@ export class App implements OnDestroy {
     }
 
     async chooseData(): Promise<void> {
+        // Inform the user about the action
         await this.msgBox.showMsg("Now choose a folder with data for AI to read, for example, " +
             "the folders used for the built-in Notebook app.<br>" +
             "This folder will be added to a list of data folders.");
+
+        // Prompt the user to pick a directory using the File System Access API
+        let dirHandle: any;
+
+        try {
+            // @ts-ignore – showDirectoryPicker may not be in TypeScript lib
+            dirHandle = await (window as any).showDirectoryPicker();
+        } catch (e) {
+            console.error('Directory picker cancelled or not supported', e);
+            this.toast.info('Directory selection cancelled');
+            return;
+        }
+        if (!dirHandle) {
+            this.toast.info('No directory selected');
+            return;
+        }
+        // Previously used the directory name as the folder ID.
+        // Now read the identifier from the marker file "aimav-folder.id" located inside the selected folder.
+        let folderId: string;
+        try {
+            const idFileHandle = await dirHandle.getFileHandle('aimav-folder.id');
+            const file = await idFileHandle.getFile();
+            folderId = await file.text();
+            folderId = folderId.trim();
+        } catch (e) {
+            // If the marker file cannot be read, fall back to using the directory name.
+            console.warn('Failed to read aimav-folder.id, falling back to directory name', e);
+            // @ts-ignore
+            folderId = window.new_id();
+        }
+
+        // Check if the marker file already exists in the chosen folder
+        let markerExists = false;
+
+        try {
+            await dirHandle.getFileHandle('aimav-folder.id');
+            markerExists = true;
+        } catch (_) {
+            // file does not exist – that's fine
+        }
+
+        // Check if this folder is already recorded in Dexie
+        let alreadySaved = false;
+
+        if (this.db && this.db.dataFolders) {
+            const existing = await this.db.dataFolders.where('id').equals(folderId).first();
+            alreadySaved = !!existing;
+        }
+
+        // Only proceed if the marker file is missing and the folder is not yet saved
+        if (!markerExists && !alreadySaved) {
+            // Save the directory handle to Dexie
+            try {
+                await this.db.dataFolders.add({ id: folderId, handle: dirHandle });
+            } catch (e) {
+                console.error('Failed to save data folder handle', e);
+                this.toast.info('Failed to save folder');
+                return;
+            }
+            // Create the marker file with a new id
+            try {
+                const fileHandle = await dirHandle.getFileHandle('aimav-folder.id', { create: true });
+                const writable = await fileHandle.createWritable();
+                const newId = (window as any).new_id ? (window as any).new_id() : `${Date.now()}`;
+                await writable.write(newId);
+                await writable.close();
+            } catch (e) {
+                console.error('Failed to create marker file', e);
+                this.toast.info('Folder saved but failed to create marker file');
+                return;
+            }
+            this.toast.success('Data folder added successfully');
+        } else {
+            this.toast.info('Folder already added or marker file exists');
+        }
     }
 
     async removeFromCategory(app: any): Promise<void> {
@@ -1376,6 +1452,9 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
+
 
 
 
