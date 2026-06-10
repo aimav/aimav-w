@@ -27,6 +27,8 @@ import { FormsModule } from '@angular/forms';
 import { sha1 } from '../modules/common.js';
 
 import IgSync from '../libs/igsync/igsync';
+// FlexSearch for full‑text indexing of markdown files
+import FlexSearch from 'flexsearch';
 
 var log = console.log;
 // Streaming guide: https://openrouter.ai/openrouter/free
@@ -34,143 +36,6 @@ const CURRENT_MODEL = "openrouter/free";
 const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
 const G_APP_API_KEY = "AIzaSyBbCJzvgQ7UTyhSLc6Ae4-XUP7Slvi3coo";
 const DB_NAME = "AimavDB";
-
-// Legacy reference to the old RxDB schemas:
-const RXDB_SCHEMAS = {
-    chatMessages: {
-        migrationStrategies: {
-            // 1: (d: any) => d
-        },
-        schema: {
-            version: 0,
-            primaryKey: 'id', // FIELD
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 }, // FIELD
-                tokens: { // Lite FTS to avoid filtering 'messages' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
-                messages: { // FIELD
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            idstr: { type: 'string', maxLength: 100 }, // FIELD
-                            content: { type: 'string', maxLength: 1000 }, // FIELD
-                            timestamp: { type: "number", "multipleOf": 1 } // FIELD
-                        },
-                        required: ['idstr', 'content', 'timestamp'],
-                    }
-                },
-            },
-            required: ['year'],
-            indexes: ["year"]
-        }
-    },
-    notes: {
-        migrationStrategies: {
-            // 1: (d: any) => d
-        },
-        schema: {
-            version: 0,
-            primaryKey: 'id',
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 },
-                tokens: { // Lite FTS to avoid filtering 'notes' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
-                notes: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            idstr: { type: 'string', maxLength: 100 },
-                            title: { type: "string", maxLength: 1000 },
-                            content: { type: 'string', maxLength: 10000 },
-                            timestamp: { type: "number", "multipleOf": 1 }
-                        },
-                        required: ['idstr', "title", 'content', 'timestamp'],
-                    }
-                },
-            },
-            required: ['year'],
-            indexes: ["year"]
-        }
-    },
-    pinnedApps: {
-        migrationStrategies: {
-            // 1: (d: any) => d
-        },
-        schema: {
-            version: 0,
-            primaryKey: 'id',
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 },
-                tokens: { // Lite FTS to avoid filtering 'notes' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                name: { type: "string", maxLength: 100 },
-                url: { type: 'string', maxLength: 1000 },
-                icon: { type: 'string', maxLength: 1000 },
-                description: { type: 'string', maxLength: 1000 },
-                tags: { type: "array", items: { type: "string", maxLength: 100 } },
-                integrated: { type: "boolean" },
-                internal: { type: "boolean" },
-                custom: { type: "boolean" }
-            },
-            required: ['name', "url"],
-            indexes: ["name", "url"]
-        }
-    },
-    appCategories: {
-        migrationStrategies: {
-            1: (d: any) => d
-        },
-        schema: {
-            version: 1,
-            primaryKey: 'id',
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 },
-                tokens: { // Lite FTS to avoid filtering 'apps' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                categoryName: { type: 'string', maxLength: 500 }, // Grouping up to avoid slow sync by item modified time 1 by 1
-                apps: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            idstr: { type: 'string', maxLength: 100 },
-                            name: { type: "string", maxLength: 1000 },
-                            url: { type: 'string', maxLength: 10000 },
-                            icon: { type: 'string', maxLength: 1000 }
-                        },
-                        required: ['idstr', "name", 'url'],
-                    }
-                },
-            },
-            required: ['categoryName'],
-            indexes: ["categoryName"]
-        }
-    }
-};
 
 @Component({
     selector: 'app-root',
@@ -677,6 +542,75 @@ export class App implements OnDestroy {
         this.toggleApps();
     }
 
+    public commonFtsCache: any = null;
+    public commonIndex: any = null;
+
+    //
+    async mountCommonIndex(): Promise<any> {
+        this.commonFtsCache = new FlexSearch.IndexedDB("Cache");
+        const commonIndex = new FlexSearch.Document({
+            // Basic configuration – can be tuned later
+            tokenize: "forward",
+            // Encode function to normalize text to lower case and split into tokens
+            encode: (text: string) => text.toLowerCase().split(/\s+/),
+            document: {
+                // The unique identifier for each document
+                id: "path",
+                // Fields to be indexed
+                index: ["content", "folderId"]
+            }
+        });
+        await commonIndex.mount(this.commonFtsCache);
+        return commonIndex;
+    }
+
+    //
+    /**
+     * Indexes all markdown files within the provided directory handle using FlexSearch.
+     *
+     * @param dirHandle - A FileSystemDirectoryHandle obtained via the File System Access API.
+     */
+    async indexFts(dirHandle: any, folderId: string): Promise<void> {
+        // Create a FlexSearch index named 'commonIndex'
+        // Use FlexSearch Document for indexing with fields
+        var commonIndex = await this.mountCommonIndex();
+
+        /**
+         * Recursively walk through a directory and collect markdown file handles.
+         */
+        const walk = async (handle: any, pathPrefix: string = "") => {
+            for await (const entry of handle.values()) {
+                const entryPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+
+                if (entry.kind === "file" && entry.name.endsWith('.md')) {
+                    try {
+                        const file = await entry.getFile();
+                        const text = await file.text();
+                        // Add to FlexSearch index – using the file path as the document id
+                        // Add document to the index: first argument is the id, second is the fields object
+                        commonIndex.add(entryPath, { content: text, folderId: folderId });
+                    } catch (e) {
+                        console.error('Failed to read markdown file', entryPath, e);
+                    }
+                } else if (entry.kind === "directory") {
+                    // Recurse into sub‑directory
+                    await walk(entry, entryPath);
+                }
+            }
+        };
+
+        try {
+            await walk(dirHandle, folderId);
+            // Store the index on the component instance for later use (optional)
+            (this as any).commonIndex = commonIndex;
+            this.toast.success('Indexed markdown files for full‑text search');
+        } catch (e) {
+            console.error('Error while indexing files', e);
+            this.toast.info('Failed to build search index');
+        }
+        commonIndex.commit();
+    }
+
     async chooseData(): Promise<void> {
         // Inform the user about the action
         await this.msgBox.showMsg("Now choose a folder with data for AI to read, for example, " +
@@ -757,6 +691,7 @@ export class App implements OnDestroy {
         } else {
             this.toast.info('Folder already added or marker file exists');
         }
+        this.indexFts(dirHandle, folderId);
     }
 
     async removeFromCategory(app: any): Promise<void> {
@@ -1228,6 +1163,7 @@ export class App implements OnDestroy {
         return tokens.filter(t => t.length > 0);
     }
 
+    //
     public async sendMessage(ev: Event) {
         ev.preventDefault();
         const message = this.chatInput();
@@ -1292,8 +1228,33 @@ export class App implements OnDestroy {
         }
         // Clear the input field
         this.chatInput.set("");
-
         this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
+        // Use FlexSearch cache to find items matching the message
+        try {
+            // Perform a search on the common FlexSearch cache using the user's message
+            // FlexSearch.IndexedDB does not have a typed `search` method in the current typings,
+            // so we cast to `any` to bypass the TypeScript error while still invoking the runtime method.
+            // Use the FlexSearch Document index for searching instead of the IndexedDB cache,
+            // which does not provide a .search method. The index was stored on the component
+            // instance as `commonIndex` during indexing.
+            this.commonIndex = await this.mountCommonIndex();
+            const ftsResults = await (this as any).commonIndex.search(message, {
+                suggest: true
+            });
+
+            if (ftsResults && ftsResults.length) {
+                // Show a toast with the number of matches found
+                this.toast.info(`FlexSearch found ${ftsResults.length} matching item(s)`);
+                // Optionally, you could log the result IDs for debugging
+                let filePath = ftsResults[0].result[0];
+                console.log('FlexSearch results:', filePath);
+            } else {
+                this.toast.info('FlexSearch found no matching items');
+            }
+        } catch (e) {
+            console.error('Error searching FlexSearch cache', e);
+            this.toast.info('Error performing search');
+        }
 
         // Send the message to OpenRouter if an API key is stored
         const apiKey = localStorage.getItem('aiKey');
@@ -1312,114 +1273,112 @@ export class App implements OnDestroy {
             this.msgBox.showMsg("Please get AI key and save it on right column first.")
             return;
         }
-        if (apiKey) {
-            // Show a temporary "Asking model..." message in the chat log
-            const askingDiv = document.createElement('div');
-            askingDiv.textContent = 'Asking model...';
-            this.chatLogDiv.nativeElement.appendChild(askingDiv);
-            try {
-                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Accept': 'text/event-stream',
-                    },
-                    body: JSON.stringify({
-                        model: CURRENT_MODEL,
-                        messages: [{ role: 'user', content: message }],
-                        stream: true
-                    }),
-                });
+        // Show a temporary "Asking model..." message in the chat log
+        const askingDiv = document.createElement('div');
+        askingDiv.textContent = 'Asking model...';
+        this.chatLogDiv.nativeElement.appendChild(askingDiv);
+        try {
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Accept': 'text/event-stream',
+                },
+                body: JSON.stringify({
+                    model: CURRENT_MODEL,
+                    messages: [{ role: 'user', content: message }],
+                    stream: true
+                }),
+            });
 
-                // Stream response chunks to console before processing
-                const reader = response.body?.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let streamedText = '';
-                // Create a temporary streaming block in the chat log
-                const streamingDiv = document.createElement('div');
-                streamingDiv.className = 'streaming';
-                this.chatLogDiv.nativeElement.appendChild(streamingDiv);
+            // Stream response chunks to console before processing
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let streamedText = '';
+            // Create a temporary streaming block in the chat log
+            const streamingDiv = document.createElement('div');
+            streamingDiv.className = 'streaming';
+            this.chatLogDiv.nativeElement.appendChild(streamingDiv);
 
-                if (reader) {
-                    while (true) {
-                        const v = await reader.read();
-                        const { done, value } = v;
-                        if (done) break;
+            if (reader) {
+                while (true) {
+                    const v = await reader.read();
+                    const { done, value } = v;
+                    if (done) break;
 
-                        const chunk = decoder.decode(value, { stream: true });
-                        if (chunk.trim().length == 0) continue;
-                        if (!chunk.startsWith("data:")) continue;
-                        // console.log('Stream chunk:', chunk);
+                    const chunk = decoder.decode(value, { stream: true });
+                    if (chunk.trim().length == 0) continue;
+                    if (!chunk.startsWith("data:")) continue;
+                    // console.log('Stream chunk:', chunk);
 
-                        let parts = chunk.split("\n");
+                    let parts = chunk.split("\n");
 
-                        for (let p of parts) {
-                            p = p.slice(5).trim();
-                            if (p == "[DONE]") break;
-                            if (p.trim().length == 0) continue;
-                            let obj;
+                    for (let p of parts) {
+                        p = p.slice(5).trim();
+                        if (p == "[DONE]") break;
+                        if (p.trim().length == 0) continue;
+                        let obj;
 
-                            try {
-                                obj = JSON.parse(p);
-                                streamedText += obj.choices[0].delta.content;
-                            }
-                            catch {
-                                // streamedText += `\n[A-CHUNK]\n`;
-                                streamedText += `...\x20`;
-                            }
-                            if (modelName == null && obj.model != null)
-                                modelName = obj.model;
-                        }
-
-                        // Convert streamed markdown to HTML and display in the streaming block
                         try {
-                            // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
-                            const html = converter.makeHtml(streamedText);
-                            streamingDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
-
-                            if (!manuallyScrolled)
-                                this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
-
-                            if (modelName == null) {
-                                log("Null response from openrouter");
-                                this.chatInput.set(message.trim());
-                            }
-                        } catch (e) {
-                            console.error('Error converting markdown to HTML:', e);
+                            obj = JSON.parse(p);
+                            streamedText += obj.choices[0].delta.content;
                         }
+                        catch {
+                            // streamedText += `\n[A-CHUNK]\n`;
+                            streamedText += `...\x20`;
+                        }
+                        if (modelName == null && obj.model != null)
+                            modelName = obj.model;
                     }
-                    streamingDiv.remove();
-                }
 
-                // Convert AI response markdown to HTML using Showdown
-                try {
-                    // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
-                    const aiMessage = streamedText;
-                    var html = converter.makeHtml(aiMessage);
-                    html += `<div><small>(Answered by ${modelName})</small></div>`;
-                    const aiDiv = document.createElement('div');
-                    aiDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
-                    this.chatLogDiv.nativeElement.appendChild(aiDiv);
-                    this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+                    // Convert streamed markdown to HTML and display in the streaming block
+                    try {
+                        // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+                        const html = converter.makeHtml(streamedText);
+                        streamingDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
 
-                    if (modelName == null) {
-                        log("Null response from openrouter");
-                        this.chatInput.set(message.trim());
+                        if (!manuallyScrolled)
+                            this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+
+                        if (modelName == null) {
+                            log("Null response from openrouter");
+                            this.chatInput.set(message.trim());
+                        }
+                    } catch (e) {
+                        console.error('Error converting markdown to HTML:', e);
                     }
-                } catch (e) {
-                    console.error('Error converting markdown to HTML:', e);
                 }
-                // Remove the "Asking model..." placeholder after receiving response
-                if (askingDiv.parentNode) {
-                    askingDiv.parentNode.removeChild(askingDiv);
+                streamingDiv.remove();
+            }
+
+            // Convert AI response markdown to HTML using Showdown
+            try {
+                // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
+                const aiMessage = streamedText;
+                var html = converter.makeHtml(aiMessage);
+                html += `<div><small>(Answered by ${modelName})</small></div>`;
+                const aiDiv = document.createElement('div');
+                aiDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
+                this.chatLogDiv.nativeElement.appendChild(aiDiv);
+                this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+
+                if (modelName == null) {
+                    log("Null response from openrouter");
+                    this.chatInput.set(message.trim());
                 }
-            } catch (err) {
-                console.error('Error calling OpenRouter:', err);
-                // Ensure placeholder is removed even on error
-                if (askingDiv.parentNode) {
-                    askingDiv.parentNode.removeChild(askingDiv);
-                }
+            } catch (e) {
+                console.error('Error converting markdown to HTML:', e);
+            }
+            // Remove the "Asking model..." placeholder after receiving response
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
+            }
+        } catch (err) {
+            console.error('Error calling OpenRouter:', err);
+            // Ensure placeholder is removed even on error
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
             }
         }
     }
@@ -1452,6 +1411,13 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
+
+
+
+
+
 
 
 
