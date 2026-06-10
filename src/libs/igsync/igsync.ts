@@ -408,20 +408,27 @@ class IgSync {
                 console.warn('Dexie table not found for store', store);
                 continue;
             }
-            const count = await table.count();
+            var count = await table.count();
             if (count > 0) continue; // Table already has data.
+            this._app.toast.info("Downloading " + store + "...");
 
             // Ensure the folder exists on Google Drive.
             const folderPath = `/Aimav/AimavDB/${store}`; // Using store as folder under Aimav.
             await this.createFolder('/Aimav/AimavDB', store);
             const folderInfo = await this.getFolderWithItems(folderPath);
-            const items = folderInfo.items || [];
+            const items = folderInfo.items ?? [];
+            var upCount = 0;
 
             for (const item of items) {
                 try {
                     const content = await this.readFile(folderInfo.id, item.name);
                     const data = JSON.parse(content);
                     await table.put(data);
+
+                    if (upCount % 10 === 0) {
+                        this._app.toast.info(`Download progress ${upCount + 1} / ${items.length}`);
+                    }
+                    upCount++;
                 } catch (e) {
                     console.error('Failed to load item into', store, e);
                 }
@@ -576,7 +583,51 @@ class IgSync {
 
     // 
     async syncToCloud(deviceId: string) {
-        // Resolve the top‑level Aimav folder.
+        // ------------------------------------------------------------
+        // Sync empty Dexie tables to corresponding Google Drive folders
+        // ------------------------------------------------------------
+        // Resolve the AimavDB folder on Google Drive.
+        const dbFolderInfo = await this.getFolderInfo('/Aimav/AimavDB');
+        const dbFolderId = dbFolderInfo.id;
+
+        // List all sub‑folders inside AimavDB – each folder name is expected
+        // to match a Dexie table name (e.g., "chatMessages", "notes", etc.).
+        const subFoldersRes = await (window as any).gapi.client.drive.files.list({
+            q: `'${dbFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+            spaces: 'drive',
+        });
+        const subFolders: any[] = subFoldersRes.result.files || [];
+
+        for (const subFolder of subFolders) {
+            // Check if the folder is empty (no files inside).
+            const itemsRes = await (window as any).gapi.client.drive.files.list({
+                q: `'${subFolder.id}' in parents and trashed = false`,
+                fields: 'files(id)',
+                spaces: 'drive',
+            });
+            const items = itemsRes.result.files || [];
+
+            if (items.length === 0) {
+                this._app.toast.info("Uploading " + subFolder.name + "...");
+                // Folder empty – pull all records from the matching Dexie table.
+                const tableName = subFolder.name;
+
+                if (this._db && typeof this._db[tableName]?.toArray === 'function') {
+                    const records = await this._db[tableName].toArray();
+
+                    // Write each record as a JSON file into the Google Drive folder.
+                    for (const rec of records) {
+                        const fileName = `${rec.id ?? Date.now()}.json`;
+                        const content = JSON.stringify(rec, null, 4);
+                        await this.createFile(subFolder.id, fileName);
+                        await this.writeFile(subFolder.id, fileName, content);
+                    }
+                }
+            }
+        }
+
+        // Resolve the top‑level Aimav folder for the rest of the sync logic.
         const folderInfo = await this.getFolderInfo('/Aimav');
         const folderId = folderInfo.id;
 
