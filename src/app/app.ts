@@ -593,9 +593,7 @@ export class App implements OnDestroy {
         const igSync = this.igSync;
         this.toast.info("Initializing Google Drive...");
         // @ts-ignore
-        await igSync.init(this, G_APP_CLIENT_ID, G_APP_API_KEY, window.gAccessToken);
-
-        this.toast.info("Syncing data with Google Drive...");
+        await igSync.init(this, this.db, G_APP_CLIENT_ID, G_APP_API_KEY, window.gAccessToken);
         await igSync.sync(DB_NAME);
     }
 
@@ -1405,7 +1403,8 @@ export class App implements OnDestroy {
 
         // Initialise Dexie database instance
         this.db = new AppDexie();
-
+        // @ts-ignore
+        log("This device id:", localStorage.deviceId);
         this.msgBox.showMsg("You should click Sync Data now to get data modified on other devices");
     }
 

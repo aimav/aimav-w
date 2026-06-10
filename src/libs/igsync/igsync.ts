@@ -4,6 +4,7 @@ var log = console.log;
 // indexeddb-gdrive sync lib
 class IgSync {
     private _app: any;
+    private _db: any;
     private _clientId: string = "";
     private _apiKey: string = "";
     private _accessToken: string = "";
@@ -41,11 +42,12 @@ class IgSync {
 
             for (const part of parts) {
                 const response = await (window as any).gapi.client.drive.files.list({
-                    q: `'${parentId}' in parents and name = '${part}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+                    q: `'${parentId}' in parents and name = '${part}' and trashed = false`,
                     fields: 'files(id, name)',
                     spaces: 'drive',
                 });
                 const files = response.result.files;
+
                 if (!files || files.length === 0) {
                     // Folder does not exist – create it.
                     const createRes = await (window as any).gapi.client.drive.files.create({
@@ -65,18 +67,18 @@ class IgSync {
         };
         const parentId = await findFolderId(path);
 
-        if (parentId == "root") {
-            const response = await (window as any).gapi.client.drive.files.list({
-                q: `'${parentId}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-                fields: 'files(id, name)',
-                spaces: 'drive',
-            });
-            const files = response.result.files;
-            if (!files || files.length === 0) { }
-            else {
-                log("Folder exists:", path, name);
-                return;
-            }
+        // Check if exists in parent folder
+        const response = await (window as any).gapi.client.drive.files.list({
+            q: `'${parentId}' in parents and name = '${name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+            fields: 'files(id, name)',
+            spaces: 'drive',
+        });
+        const files = response.result.files;
+
+        if (!files || files.length === 0) { }
+        else {
+            log("Folder exists:", response.result.files[0]);
+            return response.result.files[0];
         }
 
         // Create the final folder.
@@ -88,6 +90,7 @@ class IgSync {
             },
             fields: 'id, name',
         });
+        log("New folder:", result.result);
         return result.result;
     }
 
@@ -309,8 +312,9 @@ class IgSync {
      */
     // Initialize the IgSync instance with the OAuth client ID and an access token.
     // Additionally, ensure the required folder structure exists on Google Drive.
-    async init(app: any, clientId: string, apiKey: string, accessToken: string): Promise<void> {
+    async init(app: any, db: any, clientId: string, apiKey: string, accessToken: string): Promise<void> {
         this._app = app;
+        this._db = db;
         // Store the client ID and access token for later use when loading the Google API client.
         this._clientId = clientId;
         this._apiKey = apiKey;
@@ -362,6 +366,8 @@ class IgSync {
         }
 
         const key = `${dbName}/${storeName}/${id}`;
+        log(`Data item ${op}:`, key);
+
         if (!changedMap[key]) {
             changedMap[key] = op;
             localStorage['changedObjects'] = JSON.stringify(changedMap);
@@ -395,14 +401,118 @@ class IgSync {
 
         const objects = jsonObj.objectsToLoad;
         log("objects to load:", objects.length);
+        var okCount = 0;
+        var n = objects.length;
+        var i = 0;
 
         if (Array.isArray(objects)) {
             for (const obj of objects) {
                 console.log('Object to load:', obj);
+                this._app.toast.info(`Progress ${i + 1} / ${n}`);
+                i++;
+                // Handle synchronization based on operation type.
+                const { db, store, id, op } = obj;
+                // Resolve Dexie table reference.
+                const table = this._db.table ? this._db.table(store) : this._db[store];
+
+                if (!table) {
+                    console.warn('Dexie table not found for store', store);
+                    continue;
+                }
+                if (op === 'deleted') {
+                    // Delete the record from IndexedDB.
+                    try {
+                        await table.delete(id);
+                        okCount++;
+                    } catch (e) {
+                        console.error('Failed to delete item from Dexie', e);
+                        okCount++;
+                    }
+                } else if (op === 'modified') {
+                    // Ensure the folder exists on Google Drive.
+                    const folderPath = `/Aimav/${db}/${store}`;
+                    // Create folder if missing.
+                    await this.createFolder(`/Aimav/${db}`, store);
+                    const folderInfo = await this.getFolderInfo(folderPath);
+                    const fileName = `${id}.json`;
+
+                    try {
+                        const fileContent = await this.readFile(folderInfo.id, fileName);
+                        const data = JSON.parse(fileContent);
+                        // Save or update the record in Dexie.
+                        await table.put(data);
+                        okCount++;
+                    } catch (e: any) {
+                        console.error('Failed to load or save modified item', e);
+                        if (e.toString().includes("not valid JSON")) okCount++;
+                    }
+                } else {
+                    console.warn('Unsupported operation in syncFromCloud', op);
+                }
             }
         } else {
             console.warn('objectsToLoad is not an array in', fileName);
         }
+        log(`Sync from cloud: ${okCount} / ${objects.length} items`);
+
+        if (okCount == objects.length) {
+            // After successful sync, clear the objectsToLoad array in the device config file on Google Drive.
+            jsonObj.objectsToLoad = [];
+            const clearedContent = JSON.stringify(jsonObj, null, 4);
+            await this.writeFile(folderId, fileName, clearedContent);
+        }
+    }
+
+    //
+    async updateGdriveItem(item: any) {
+        log("Item to upload/del:", item);
+        // item shape: { db: string, store: string, id: string, op: string, content?: any }
+        // Determine the folder path under the top‑level Aimav folder.
+        const folderPath = `/Aimav/${item.db}/${item.store}`;
+        // Resolve folder ID.
+        await this.createFolder(`/Aimav/${item.db}`, item.store);
+        const folderInfo = await this.getFolderInfo(folderPath);
+        const folderId = folderInfo.id;
+        const fileName = `${item.id}.json`;
+
+        // If the operation is a modification and content is not provided, load it from IndexedDB.
+        if (item.op === "modified") {
+            let contentData = item.content;
+
+            if (contentData === undefined) {
+                // Load the record from the Dexie database. The db instance is stored in this._db.
+                try {
+                    // Dexie tables can be accessed via this._db.table(name) or directly as a property.
+                    const table = this._db.table ? this._db.table(item.store) : this._db[item.store];
+
+                    if (!table) {
+                        throw new Error(`Table ${item.store} not found in DB`);
+                    }
+                    const record = await table.get(item.id);
+                    contentData = record;
+                } catch (e) {
+                    console.error('Failed to load item from DB for updateGdriveItem', e);
+                    return "error";
+                }
+            }
+            const content = typeof contentData === "string" ? contentData : JSON.stringify(contentData, null, 4);
+            await this.writeFile(folderId, fileName, content);
+            return "ok";
+        }
+        else if (item.op === "deleted") {
+            // Delete the file from Google Drive.
+            try {
+                await this.deleteFile(folderId, fileName);
+                return "ok";
+            } catch {
+                log("Id not found on G drive:", item);
+                return "ok";
+            }
+        }
+        else {
+            console.warn("Unsupported operation for updateGdriveItem", item.op);
+        }
+        return "error";
     }
 
     // 
@@ -413,27 +523,43 @@ class IgSync {
 
         // List all JSON files in the Aimav folder.
         const listRes = await (window as any).gapi.client.drive.files.list({
-            q: `'${folderId}' in parents and mimeType = 'application/json' and trashed = false`,
+            q: `'${folderId}' in parents and trashed = false`,
             fields: 'files(id, name)',
             spaces: 'drive',
         });
-        const files = listRes.result.files || [];
+        var files: any[] = listRes.result.files || [];
+        files = files.filter(x => x.name.endsWith(".json"));
+        log("Device files:", files);
 
         // Load changed objects map from localStorage.
         let changedMap: Record<string, string> = {};
+
         try {
             const raw = localStorage['changedObjects'];
             if (raw) changedMap = JSON.parse(raw);
-        } catch (e) {
+            log("changedMap:", changedMap);
+        }
+        catch (e) {
             console.warn('Failed to parse changedObjects', e);
+            this._app.toast.info("Failed to parse changedObjects");
+            return;
         }
 
         // Prepare entries to add: {id, op}
         const changedEntries = Object.entries(changedMap).map(([key, op]) => {
             const parts = key.split('/');
-            const id = parts[parts.length - 1];
-            return { id, op };
+            const db = parts[0];
+            const store = parts[1];
+            const id = parts[2];
+            return { db, store, id, op };
         });
+        var okCount = 0;
+
+        for (let entry of changedEntries) {
+            let status = await this.updateGdriveItem(entry);
+            if (status === "ok") okCount++;
+            this._app.toast.info(`Progress ${okCount} / ${changedEntries.length}`);
+        }
 
         // Process each JSON file except the device config file.
         for (const file of files) {
@@ -443,6 +569,7 @@ class IgSync {
             // Read file content.
             const content = await this.readFile(folderId, file.name);
             let jsonObj: any;
+
             try {
                 jsonObj = JSON.parse(content);
             } catch (e) {
@@ -466,14 +593,19 @@ class IgSync {
             const newContent = JSON.stringify(jsonObj, null, 4);
             await this.writeFile(folderId, file.name, newContent);
         }
+        this._app.toast.info("Sync'ing TO Google Drive done.");
+
+        // Clear changedObjects
+        if (okCount == changedEntries.length)
+            delete localStorage['changedObjects'];
     }
 
     //
     async sync(dbName: string) {
         var deviceId = localStorage['deviceId'];
-        this._app.toast.info("Syncing data from Google Drive...");
+        this._app.toast.info("Syncing data FROM Google Drive...");
         await this.syncFromCloud(deviceId);
-        this._app.toast.info("Syncing data to Google Drive...");
+        this._app.toast.info("Syncing data TO Google Drive...");
         await this.syncToCloud(deviceId);
     }
 
