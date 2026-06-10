@@ -384,6 +384,50 @@ class IgSync {
     // Reads the device configuration file from Google Drive and logs each entry
     // in the `objectsToLoad` array.
     async syncFromCloud(deviceId: string) {
+        // ---------------------------------------------------------------------
+        // Initial sync: ensure each Dexie table is populated if empty.
+        // ---------------------------------------------------------------------
+        // List of Dexie stores defined in AppDexie (src/app/dexie-db.ts).
+        const dexieStores = [
+            'chatMessages',
+            'notes',
+            'pinnedApps',
+            'appCategories',
+            'customApps',
+        ];
+
+        // For each store, check if the table is empty. If it is, download all
+        // JSON files from the corresponding Google Drive folder and insert
+        // them into the Dexie table.
+        for (const store of dexieStores) {
+            // Resolve table reference – Dexie tables can be accessed via the
+            // `table` method or as a property on the DB instance.
+            let table = this._db.table ? this._db.table(store) : this._db[store];
+
+            if (!table) {
+                console.warn('Dexie table not found for store', store);
+                continue;
+            }
+            const count = await table.count();
+            if (count > 0) continue; // Table already has data.
+
+            // Ensure the folder exists on Google Drive.
+            const folderPath = `/Aimav/AimavDB/${store}`; // Using store as folder under Aimav.
+            await this.createFolder('/Aimav/AimavDB', store);
+            const folderInfo = await this.getFolderWithItems(folderPath);
+            const items = folderInfo.items || [];
+
+            for (const item of items) {
+                try {
+                    const content = await this.readFile(folderInfo.id, item.name);
+                    const data = JSON.parse(content);
+                    await table.put(data);
+                } catch (e) {
+                    console.error('Failed to load item into', store, e);
+                }
+            }
+        }
+
         // Resolve the folder information for the top-level Aimav folder.
         const folderInfo = await this.getFolderInfo('/Aimav');
         const folderId = folderInfo.id;
@@ -413,11 +457,26 @@ class IgSync {
                 // Handle synchronization based on operation type.
                 const { db, store, id, op } = obj;
                 // Resolve Dexie table reference.
-                const table = this._db.table ? this._db.table(store) : this._db[store];
+                let table = this._db.table ? this._db.table(store) : this._db[store];
 
                 if (!table) {
                     console.warn('Dexie table not found for store', store);
-                    continue;
+                    // Dynamically create a Dexie table for the missing store.
+                    // Use a simple schema with primary key 'id' for the new table.
+                    const schema: any = {};
+                    schema[store] = 'id';
+                    // Add a new version or extend the existing one.
+                    // Dexie allows defining stores on the same version; we use version(1) for simplicity.
+                    // If version 1 already exists, this call will merge the new store.
+                    this._db.version(1).stores(schema);
+                    // Retrieve the newly created table reference.
+                    const newTable = this._db.table ? this._db.table(store) : this._db[store];
+                    if (!newTable) {
+                        console.error('Failed to create Dexie table for store', store);
+                        continue;
+                    }
+                    // Replace the missing table with the newly created one for further processing.
+                    table = newTable;
                 }
                 if (op === 'deleted') {
                     // Delete the record from IndexedDB.

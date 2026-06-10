@@ -9,7 +9,26 @@
     <link rel="icon" type="image/x-icon" href="favicon.ico">
     <!-- Import Showdown library for markdown conversion -->
     <script src="libs/showdown.min.js"></script>
+
     <script src="https://accounts.google.com/gsi/client" async></script>
+    <!-- Load Google API client library for Drive operations -->
+    <script src="https://apis.google.com/js/api.js" async defer crossorigin="anonymous"></script>
+    <script>
+        // Initialize the Google API client library once it's loaded.
+        function initGapi() {
+            if (window.gapi) {
+                // Load the client module.
+                window.gapi.load('client', () => {
+                    console.log('gapi client loaded');
+                });
+            } else {
+                // Retry after a short delay if gapi is not yet available.
+                setTimeout(initGapi, 100);
+            }
+        }
+        // Start initialization after the script is fetched.
+        initGapi();
+    </script>
     <!-- <script src="https://cdn.jsdelivr.net/npm/jwt-decode@4.0.0/build/cjs/index.min.js"></script> -->
 
     <script>
@@ -25,6 +44,6 @@
 
 <body>
     <app-root></app-root>
-<script src="polyfills-KYZQLWB5.js" type="module"></script><script src="main-ZTE4NL67.js" type="module"></script></body>
+<script src="polyfills-KYZQLWB5.js" type="module"></script><script src="main-HX6LADOL.js" type="module"></script></body>
 
 </html>

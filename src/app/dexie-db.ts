@@ -42,11 +42,22 @@ export interface AppCategory {
     apps: { idstr: string; name: string; url: string; icon?: string }[];
 }
 
+export interface CustomApp {
+    id: string;
+    name: string;
+    url: string;
+    icon?: string;
+    integrated: boolean;
+    internal: boolean;
+    custom: boolean;
+}
+
 export class AppDexie extends Dexie {
     chatMessages!: Table<ChatMessage, string>;
     notes!: Table<Note, string>;
     pinnedApps!: Table<PinnedApp, string>;
     appCategories!: Table<AppCategory, string>;
+    customApps!: Table<CustomApp, string>;
 
     constructor() {
         super('AimavDB');
@@ -54,7 +65,8 @@ export class AppDexie extends Dexie {
             chatMessages: 'id, year, *tokens',
             notes: 'id, year, *tokens',
             pinnedApps: 'id, name, url, *tokens',
-            appCategories: 'id, categoryName, *tokens'
+            appCategories: 'id, categoryName, *tokens',
+            customApps: 'id, name, url, *tokens'
         });
     }
 }
