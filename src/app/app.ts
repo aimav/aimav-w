@@ -673,14 +673,7 @@ export class App implements OnDestroy {
                 console.error('Failed to add custom app to Dexie', e);
             }
         }
-        // Also persist to localStorage for any legacy code that may read it directly
-        let customApps: any[] = [];
-        const stored = localStorage.getItem('customApps');
-        if (stored) {
-            try { customApps = JSON.parse(stored); } catch { customApps = []; }
-        }
-        customApps.push({ name, url });
-        localStorage.setItem('customApps', JSON.stringify(customApps));
+        // Legacy localStorage persistence removed – Dexie is now the sole source of truth for custom apps.
         this.toggleApps();
     }
 
@@ -1383,6 +1376,7 @@ export class App implements OnDestroy {
         }
     }
 }
+
 
 
 
