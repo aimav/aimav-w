@@ -560,6 +560,11 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
 --------------------------------------------------------------------------------
+Package: @mediapipe/tasks-genai
+License: "Apache-2.0"
+
+
+--------------------------------------------------------------------------------
 Package: @angular/cdk
 License: "MIT"
 
