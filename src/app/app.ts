@@ -39,6 +39,8 @@ const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.goog
 const G_APP_API_KEY = "AIzaSyBbCJzvgQ7UTyhSLc6Ae4-XUP7Slvi3coo";
 const DB_NAME = "AimavDB";
 
+const MAX_INP_TOKENS = 24 * 1000; // gemma3 270m&1b: 32k shared pool, min 8k out
+
 @Component({
     selector: 'app-root',
     standalone: true,
@@ -1170,7 +1172,7 @@ export class App implements OnDestroy {
     //
     public async loadModel(event: Event): Promise<void> {
         event?.preventDefault?.();
-        await this.msgBox.showMsg("Pick the model file downloaded");
+        // await this.msgBox.showMsg("Pick the model file downloaded");
 
         try {
             const [fileHandle] = await (window as any).showOpenFilePicker({
@@ -1218,6 +1220,56 @@ export class App implements OnDestroy {
         }
     }
 
+    //
+    public async readRagTextFile(path: any): Promise<string> {
+        var toks = path.split("/");
+        var folderId = toks[0];
+        var innerPath = toks.slice(1);
+        log("Folder id", folderId); // Used during FTS, can't use after re-select folder
+        const folders = await this.db.dataFolders.toArray();
+
+        if (folders == null || folders.length == 0) {
+            console.warn("No content folders", folders);
+            return "";
+        }
+
+        // Find first matching the file path
+        for (let folder of folders) {
+            const dirHandle = folder.handle;
+            log("Inner path", innerPath);
+
+            // Follow the innerPath items starting from dirHandle to locate the file.
+            // The last token in innerPath is the file name. We traverse directories
+            // using the File System Access API. If any step fails we return an empty
+            // string so callers can handle the missing file gracefully.
+            try {
+                let currentHandle: any = dirHandle;
+                log("Top Dir:", currentHandle.name);
+
+                // Iterate over each segment; the last segment is the file name.
+                for (let i = 0; i < innerPath.length; i++) {
+                    const segment = innerPath[i];
+                    const isFile = i === innerPath.length - 1;
+
+                    if (isFile) {
+                        log("File:", segment);
+                        // Get the file handle and read its text content.
+                        const fileHandle = await currentHandle.getFileHandle(segment);
+                        const file = await fileHandle.getFile();
+                        return await file.text();
+                    } else {
+                        log("Dir:", segment);
+                        // Descend into the sub‑directory.
+                        currentHandle = await currentHandle.getDirectoryHandle(segment);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to read RAG text file', e);
+            }
+        }
+        return "";
+    }
+
     // 
     /**
      * Sends a prompt to the locally loaded LLM model (aiModel) and displays the response.
@@ -1226,6 +1278,15 @@ export class App implements OnDestroy {
     public async askLocalModel(message: string): Promise<void> {
         if (this.aiModel == null) {
             this.msgBox.showMsg("AI Model not loaded.");
+            return;
+        }
+        var tokCount = (this.aiModel as any).sizeInTokens(message);
+        console.log("Input tokens:", tokCount);
+
+        // Gemma 3 270m&1B has shared pool for in toks, out toks: 32k
+        // out should be at least 8k
+        if (tokCount > (32 * 1000) - (8 * 1000)) {
+            this.msgBox.showMsg("Too large message to be processed by local AI model.");
             return;
         }
 
@@ -1252,13 +1313,13 @@ export class App implements OnDestroy {
             this.chatLogDiv.nativeElement.appendChild(streamingDiv);
 
             // Gemma 3 tags, gemma 4 is different (eg. <|turn>, <turn|>...)
-            var textPrompt =
+            var xmlPrompt =
                 `<bos><start_of_turn>user\n` +
                 `${message.trim()}\n` +
                 `<end_of_turn>\n` +
                 `<start_of_turn>model\n`;
 
-            await (this.aiModel as any).generateResponse(textPrompt, (chunk: any, done: boolean) => {
+            await (this.aiModel as any).generateResponse(xmlPrompt, (chunk: any, done: boolean) => {
                 if (chunk.trim().length == 0) return;
                 // console.log('Stream chunk:', chunk);
                 streamedText += chunk;
@@ -1501,6 +1562,8 @@ export class App implements OnDestroy {
         // Clear the input field
         this.chatInput.set("");
         this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
+        var filePath;
+
         // Use FlexSearch cache to find items matching the message
         try {
             // Perform a search on the common FlexSearch cache using the user's message
@@ -1518,17 +1581,32 @@ export class App implements OnDestroy {
                 // Show a toast with the number of matches found
                 this.toast.info(`FlexSearch found ${ftsResults.length} matching item(s)`);
                 // Optionally, you could log the result IDs for debugging
-                let filePath = ftsResults[0].result[0];
+                filePath = ftsResults[0].result[0];
                 console.log('FlexSearch results:', filePath);
             } else {
                 this.toast.info('FlexSearch found no matching items');
+                console.warn('FlexSearch found no matching items');
             }
         } catch (e) {
             console.error('Error searching FlexSearch cache', e);
             this.toast.info('Error performing search');
         }
         // await this.askOpenRouter(message);
-        await this.askLocalModel(message);
+        log("Rag path:", filePath);
+
+        if (filePath == null)
+            await this.askLocalModel(message);
+        else {
+            let ragText = await this.readRagTextFile(filePath);
+
+            // @ts-ignore
+            while (this.aiModel.sizeInTokens(ragText) > MAX_INP_TOKENS) {
+                ragText = ragText.trim().replace(/\s\S+$/, "");
+            }
+            let textPrompt = `${ragText.trim()}\n\n${message}`;
+            // log("RAG Prompt: ", textPrompt);
+            await this.askLocalModel(textPrompt);
+        }
     }
 
     public async ngOnInit(): Promise<void> {
@@ -1559,6 +1637,7 @@ export class App implements OnDestroy {
         }
     }
 }
+
 
 
 
