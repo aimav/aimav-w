@@ -2,6 +2,8 @@ import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
 import { SelectBoxComponent } from '../modules/selectbox';
 
+import * as mpModule from '@mediapipe/tasks-genai';
+
 // RxDB imports removed – Dexie will be used instead
 import { AppDexie } from './dexie-db';
 
@@ -1163,6 +1165,145 @@ export class App implements OnDestroy {
         return tokens.filter(t => t.length > 0);
     }
 
+    public aiModel = null;
+
+    //
+    public async loadModel(event: Event): Promise<void> {
+        event?.preventDefault?.();
+        await this.msgBox.showMsg("Pick the model file downloaded");
+
+        try {
+            const [fileHandle] = await (window as any).showOpenFilePicker({
+                types: [{
+                    description: 'Gemma Model',
+                    accept: { 'application/octet-stream': ['.task'] }
+                }],
+                excludeAcceptAllOption: true,
+                multiple: false
+            });
+            this.toast.info("Loading file");
+            const file = await fileHandle.getFile();
+            const modelBuffer = await file.arrayBuffer();
+
+            const {
+                FilesetResolver,
+                LlmInference
+            } = mpModule;
+            this.toast.info("Initializing MediaPipe");
+            const genai = await FilesetResolver.forGenAiTasks(
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai/wasm'
+            );
+
+            this.toast.info("Creating LLM");
+            const llm = await LlmInference.createFromOptions(genai, {
+                baseOptions: {
+                    modelAssetBuffer: new Uint8Array(modelBuffer)
+                },
+                maxTokens: 24 * 1000, // max all:32k, max out:8k
+                // preferredBackend: 'GPU'
+            });
+            (this as any).aiModel = llm;
+            this.toast.success('LLM loaded successfully');
+
+            const input = (event.target as HTMLElement).ownerDocument.getElementById('input-ai-key') as HTMLInputElement | null;
+
+            if (input) {
+                input.value = fileHandle.name;
+                this.modelName = fileHandle.name;
+            }
+        }
+        catch (e) {
+            console.error('Failed to load AI model', e);
+            this.toast.info('Failed to load model');
+        }
+    }
+
+    // 
+    /**
+     * Sends a prompt to the locally loaded LLM model (aiModel) and displays the response.
+     * The model is created elsewhere via LlmInference.createFromOptions and stored in `aiModel`.
+     */
+    public async askLocalModel(message: string): Promise<void> {
+        if (this.aiModel == null) {
+            this.msgBox.showMsg("AI Model not loaded.");
+            return;
+        }
+
+        // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+        const converter = new (window as any).showdown.Converter({
+            tables: true
+        });
+        var manuallyScrolled = false;
+        this.chatLogDiv.nativeElement.addEventListener('wheel', (ev: Event) => {
+            manuallyScrolled = true;
+        });
+
+        // Show a temporary "Asking model..." message in the chat log
+        const askingDiv = document.createElement('div');
+        askingDiv.textContent = 'Asking model...';
+        this.chatLogDiv.nativeElement.appendChild(askingDiv);
+
+        try {
+            // Stream response chunks to console before processing
+            let streamedText = '';
+            // Create a temporary streaming block in the chat log
+            const streamingDiv = document.createElement('div');
+            streamingDiv.className = 'streaming';
+            this.chatLogDiv.nativeElement.appendChild(streamingDiv);
+
+            var textPrompt =
+                `<bos><start_of_turn>user\n` +
+                `${message.trim()}\n` +
+                `<end_of_turn>\n` +
+                `<start_of_turn>model\n`;
+
+            await (this.aiModel as any).generateResponse(textPrompt, (chunk: any, done: boolean) => {
+                if (chunk.trim().length == 0) return;
+                // console.log('Stream chunk:', chunk);
+                streamedText += chunk;
+
+                // Convert streamed markdown to HTML and display in the streaming block
+                try {
+                    // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+                    const html = converter.makeHtml(streamedText);
+                    streamingDiv.innerHTML = `<strong>AI</strong> <small>(${this.modelName})</small>: ${html}`;
+
+                    if (!manuallyScrolled)
+                        this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+                } catch (e) {
+                    console.error('Error converting markdown to HTML:', e);
+                }
+            });
+            streamingDiv.remove();
+
+            // Convert AI response markdown to HTML using Showdown
+            try {
+                // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
+                const aiMessage = streamedText;
+                var html = converter.makeHtml(aiMessage);
+                html += `<div><small>(Answered by ${this.modelName})</small></div>`;
+                const aiDiv = document.createElement('div');
+                aiDiv.innerHTML = `<strong>AI</strong> <small>(${this.modelName})</small>: ${html}`;
+                this.chatLogDiv.nativeElement.appendChild(aiDiv);
+                this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+            } catch (e) {
+                console.error('Error converting markdown to HTML:', e);
+            }
+            // Remove the "Asking model..." placeholder after receiving response
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
+            }
+        } catch (err) {
+            console.error('Error calling model:', err);
+            // Ensure placeholder is removed even on error
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
+            }
+        }
+    } // askLocalModel
+
+    public modelName: string = "";
+
     //
     public async askOpenRouter(message: string): Promise<void> {
         // Send the message to OpenRouter if an API key is stored
@@ -1385,7 +1526,8 @@ export class App implements OnDestroy {
             console.error('Error searching FlexSearch cache', e);
             this.toast.info('Error performing search');
         }
-        await this.askOpenRouter(message);
+        // await this.askOpenRouter(message);
+        await this.askLocalModel(message);
     }
 
     public async ngOnInit(): Promise<void> {
@@ -1416,6 +1558,13 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
+
+
+
+
+
 
 
 
