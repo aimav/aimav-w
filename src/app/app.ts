@@ -2,24 +2,10 @@ import { ChangeDetectorRef, ChangeDetectionStrategy } from '@angular/core';
 import { Component, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
 import { SelectBoxComponent } from '../modules/selectbox';
 
-import { createRxDatabase, addRxPlugin } from 'rxdb';
-import { getRxStorageDexie } from 'rxdb/plugins/storage-dexie';
-import { replicateGoogleDrive } from 'rxdb/plugins/replication-google-drive';
-import { RxDBUpdatePlugin } from 'rxdb/plugins/update';
-addRxPlugin(RxDBUpdatePlugin);
+import * as mpModule from '@mediapipe/tasks-genai';
 
-import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema';
-addRxPlugin(RxDBMigrationSchemaPlugin);
-
-import { RxDBCleanupPlugin } from 'rxdb/plugins/cleanup';
-addRxPlugin(RxDBCleanupPlugin);
-
-import { RxDBLeaderElectionPlugin } from 'rxdb/plugins/leader-election';
-addRxPlugin(RxDBLeaderElectionPlugin);
-
-import { RxDBDevModePlugin } from 'rxdb/plugins/dev-mode';
-addRxPlugin(RxDBDevModePlugin);
-import { wrappedValidateAjvStorage } from 'rxdb/plugins/validate-ajv';
+// RxDB imports removed – Dexie will be used instead
+import { AppDexie } from './dexie-db';
 
 // Create a singleton instance
 // const db = new AimavDB();
@@ -42,146 +28,18 @@ import { RouterOutlet } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { sha1 } from '../modules/common.js';
 
+import IgSync from '../libs/igsync/igsync';
+// FlexSearch for full‑text indexing of markdown files
+import FlexSearch from 'flexsearch';
+
 var log = console.log;
 // Streaming guide: https://openrouter.ai/openrouter/free
 const CURRENT_MODEL = "openrouter/free";
 const G_APP_CLIENT_ID = "819650177538-4qbhnjrmf22pamm6k0s7oq6u64i084is.apps.googleusercontent.com";
+const G_APP_API_KEY = "AIzaSyBbCJzvgQ7UTyhSLc6Ae4-XUP7Slvi3coo";
+const DB_NAME = "AimavDB";
 
-const RXDB_SCHEMAS = {
-    chatMessages: {
-        migrationStrategies: {
-            // 1: (d: any) => d
-        },
-        schema: {
-            version: 0,
-            primaryKey: 'id', // FIELD
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 }, // FIELD
-                tokens: { // Lite FTS to avoid filtering 'messages' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
-                messages: { // FIELD
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            idstr: { type: 'string', maxLength: 100 }, // FIELD
-                            content: { type: 'string', maxLength: 1000 }, // FIELD
-                            timestamp: { type: "number", "multipleOf": 1 } // FIELD
-                        },
-                        required: ['idstr', 'content', 'timestamp'],
-                    }
-                },
-            },
-            required: ['year'],
-            indexes: ["year"]
-        }
-    },
-    notes: {
-        migrationStrategies: {
-            // 1: (d: any) => d
-        },
-        schema: {
-            version: 0,
-            primaryKey: 'id',
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 },
-                tokens: { // Lite FTS to avoid filtering 'notes' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                year: { type: 'number', "multipleOf": 1, minimum: 2000, maximum: 3000 }, // Grouping up to avoid slow sync by item modified time 1 by 1
-                notes: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            idstr: { type: 'string', maxLength: 100 },
-                            title: { type: "string", maxLength: 1000 },
-                            content: { type: 'string', maxLength: 10000 },
-                            timestamp: { type: "number", "multipleOf": 1 }
-                        },
-                        required: ['idstr', "title", 'content', 'timestamp'],
-                    }
-                },
-            },
-            required: ['year'],
-            indexes: ["year"]
-        }
-    },
-    pinnedApps: {
-        migrationStrategies: {
-            // 1: (d: any) => d
-        },
-        schema: {
-            version: 0,
-            primaryKey: 'id',
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 },
-                tokens: { // Lite FTS to avoid filtering 'notes' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                name: { type: "string", maxLength: 100 },
-                url: { type: 'string', maxLength: 1000 },
-                icon: { type: 'string', maxLength: 1000 },
-                description: { type: 'string', maxLength: 1000 },
-                tags: { type: "array", items: { type: "string", maxLength: 100 } },
-                integrated: { type: "boolean" },
-                internal: { type: "boolean" },
-                custom: { type: "boolean" }
-            },
-            required: ['name', "url"],
-            indexes: ["name", "url"]
-        }
-    },
-    appCategories: {
-        migrationStrategies: {
-            1: (d: any) => d
-        },
-        schema: {
-            version: 1,
-            primaryKey: 'id',
-            type: 'object',
-            properties: {
-                id: { type: 'string', maxLength: 100 },
-                tokens: { // Lite FTS to avoid filtering 'apps' array
-                    // Badly indexeddb supports array indexing but not RxDB
-                    // need to use RxDB index, and scan (filter) inside group array instead
-                    type: "array",
-                    items: { type: "string", maxLength: 100 }
-                },
-                categoryName: { type: 'string', maxLength: 500 }, // Grouping up to avoid slow sync by item modified time 1 by 1
-                apps: {
-                    type: 'array',
-                    items: {
-                        type: 'object',
-                        properties: {
-                            idstr: { type: 'string', maxLength: 100 },
-                            name: { type: "string", maxLength: 1000 },
-                            url: { type: 'string', maxLength: 10000 },
-                            icon: { type: 'string', maxLength: 1000 }
-                        },
-                        required: ['idstr', "name", 'url'],
-                    }
-                },
-            },
-            required: ['categoryName'],
-            indexes: ["categoryName"]
-        }
-    }
-};
+const MAX_INP_TOKENS = 24 * 1000; // gemma3 270m&1b: 32k shared pool, min 8k out
 
 @Component({
     selector: 'app-root',
@@ -203,6 +61,7 @@ export class App implements OnDestroy {
     @ViewChild('promptBox') promptBox!: PromptBoxComponent;
     // Alphabet array for navigation buttons
     alphabet: string[] = Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i));
+    igSync: IgSync = new IgSync();
 
     /**
      * Navigate to home view.
@@ -252,13 +111,10 @@ export class App implements OnDestroy {
         }
         // Query categories where categoryName starts with the selected letter
         const docs = await this.db.appCategories
-            .find({
-                selector: {
-                    categoryName: { $regex: '^' + lower, $options: 'i' }
-                },
-                limit: 100
-            })
-            .exec();
+            .where('categoryName')
+            .startsWithIgnoreCase(lower)
+            .limit(100)
+            .toArray();
         const options: { [key: string]: string } = {};
 
         function uppercaseWords(str: string): string {
@@ -291,12 +147,9 @@ export class App implements OnDestroy {
                 // Find the category document where categoryName matches the selectedCategory
                 try {
                     const catDoc = await this.db.appCategories
-                        .findOne({
-                            selector: {
-                                categoryName: { $eq: selectedCategory }
-                            }
-                        })
-                        .exec();
+                        .where('categoryName')
+                        .equals(selectedCategory)
+                        .first();
                     if (catDoc && catDoc.apps) {
                         // Update the appsInCategory signal with the apps from the category
                         // Ensure apps are sorted for consistent display
@@ -372,13 +225,14 @@ export class App implements OnDestroy {
     // Filtered lists used for display based on the filter input
     public filteredApps = signal<any[]>(this.sortApps(this.apps));
     public filteredExtensions = signal<any[]>(this.extensions);
-    public filteredPinned = signal<any[]>(this.sortApps(this.getPinnedApps()));
+    // Initialize with empty list; will be populated after DB load
+    public filteredPinned = signal<any[]>([]);
     // Signal holding apps for the selected category (typed to any[] to avoid "never" inference)
     public appsInCategory = signal<any[]>([]);
     // Filtered view of category apps (typed to any[])
     public filteredCatApps = signal<any[]>([]);
 
-    handleAppFilterKeyup(event: KeyboardEvent) {
+    async handleAppFilterKeyup(event: KeyboardEvent) {
         // Prevent default form/button behaviour just in case
         event?.preventDefault?.();
         const filterInput = (event.target as HTMLInputElement | null);
@@ -411,23 +265,25 @@ export class App implements OnDestroy {
                     appinfo_contains_all(ext, toks)
                 )
             );
+            const pinned = await this.getPinnedApps();
             this.filteredPinned.set(
-                this.sortApps(this.getPinnedApps().filter((app: any) =>
+                this.sortApps(pinned.filter((app: any) =>
                     appinfo_contains_all(app, toks)
                 ))
             );
         }
     }
 
-    resetAppFilter() {
+    async resetAppFilter() {
         this.filteredApps.set(
             this.sortApps(this.apps)
         );
         this.filteredExtensions.set(
             this.extensions
         );
+        const pinned = await this.getPinnedApps();
         this.filteredPinned.set(
-            this.sortApps(this.getPinnedApps())
+            this.sortApps(pinned)
         );
     }
 
@@ -435,61 +291,41 @@ export class App implements OnDestroy {
      * Returns the list of pinned apps based on the IDs stored in localStorage.
      * The IDs are stored under the key 'pinnedApps' as a JSON array.
      */
-    public getPinnedApps(): any[] {
-        const stored = localStorage.getItem('pinnedApps');
-        let ids: any[] = [];
-
-        if (stored) {
+    /**
+     * Returns the list of pinned apps.
+     * Previously this read IDs from localStorage and matched them against the static apps list.
+     * It now loads the pinned apps directly from the Dexie `pinnedApps` object store.
+     * Custom apps stored in localStorage under 'customApps' are still merged in.
+     */
+    public async getPinnedApps(): Promise<any[]> {
+        // Load pinned apps from Dexie store
+        let pins: any[] = [];
+        if (this.db && this.db.pinnedApps) {
             try {
-                ids = JSON.parse(stored);
-                if (!Array.isArray(ids)) ids = [];
-            }
-            catch {
-                ids = [];
+                pins = await this.db.pinnedApps.toArray();
+            } catch (e) {
+                console.error('Failed to load pinned apps from Dexie', e);
+                pins = [];
             }
         }
 
-        // Match stored ids with app objects (assumes each app has a unique 'id' property)
-        var pins = this.apps.filter((app: any) => ids.includes(app.id));
-        const custom = localStorage.getItem('customApps');
-        let customApps = [];
-
-        if (custom) {
+        // Load custom apps from Dexie `customApps` table
+        let customApps: any[] = [];
+        if (this.db && this.db.customApps) {
             try {
-                const parsed = JSON.parse(custom);
-
-                if (Array.isArray(parsed)) {
-                    customApps = parsed.map((app: any) => ({
-                        ...app,
-                        integrated: false,
-                        internal: false,
-                        custom: true,
-                        // other missing fields remain as is (null/undefined)
-                    }));
-                }
-            } catch { }
-        }
-        var finalList = pins.concat(customApps);
-
-        for (let app of finalList)
-            if (app.id == null)
-                // @ts-ignore
-                app.id = window.new_id();
-
-        (async () => {
-            // Empty out the RxDB pinnedApps collection and repopulate it with the current list.
-            // This is done asynchronously and any errors are logged but do not block the return.
-            if (this.db && this.db.pinnedApps) {
-                // Remove all existing documents in the pinnedApps collection.
-                await this.db.pinnedApps.find().remove();
-                await this.db.pinnedApps.cleanup(0);
-
-                // Insert the updated list into the collection.
-                await this.db.pinnedApps.bulkInsert(finalList);
+                const stored = await this.db.customApps.toArray();
+                customApps = stored.map((app: any) => ({
+                    ...app,
+                    integrated: false,
+                    internal: false,
+                    custom: true,
+                }));
+            } catch (e) {
+                console.error('Failed to load custom apps from Dexie', e);
+                customApps = [];
             }
-        })();
-
-        return finalList;
+        }
+        return pins.concat(customApps);
     }
 
     /**
@@ -613,7 +449,7 @@ export class App implements OnDestroy {
         this.resetClearTimer();
     }
 
-
+    // Sync indexeddb to google drive
     async syncNow(event: Event) {
         await this.signInWithGoogle();
 
@@ -623,40 +459,25 @@ export class App implements OnDestroy {
                 "click Sync Data to authenticate with Google Drive.");
             return;
         }
-        var stores = Object.keys(RXDB_SCHEMAS);
 
-        for (let store of stores) {
-            log("Synchronising " + store);
-            this.toast.info("Synchronising " + store);
-            const replicationState = await replicateGoogleDrive({
-                replicationIdentifier: `aimav-${store}`,
-                collection: this.db[store], // RxCollection
-                googleDrive: {
-                    oauthClientId: G_APP_CLIENT_ID,
-                    // @ts-ignore
-                    authToken: window.gAccessToken, // USER_ACCESS_TOKEN
-                    folderPath: `Aimav/${store}`
-                },
-                live: false, // Do full sync once when user clicks Sync Data
-                pull: {
-                    batchSize: 60,
-                    modifier: doc => doc // (optional) modify invalid data
-                },
-                push: {
-                    batchSize: 60,
-                    modifier: doc => doc // (optional) modify before sending
-                }
-            });
-
-            // Observe replication states
-            replicationState.error$.subscribe(err => {
-                console.error('Replication error:', err);
-            });
-            await replicationState.awaitInitialReplication();
-        }
-        this.toast.success("Synchronization completed");
+        const igSync = this.igSync;
+        this.toast.info("Initializing Google Drive...");
+        // @ts-ignore
+        await igSync.init(this, this.db, G_APP_CLIENT_ID, G_APP_API_KEY, window.gAccessToken);
+        await igSync.sync(DB_NAME);
     }
 
+    // Update FTS data for all data folders
+    public async updateFtsData(event: Event): Promise<void> {
+        var folders = await this.db.dataFolders.toArray();
+        log("Data folders:", folders);
+
+        for (const folder of folders) {
+            this.toast.info("Updating search data for folder: " + folder.handle.name);
+            await this.indexFts(folder.handle, folder.id);
+        }
+        this.toast.success("Search data updated for all folders");
+    }
 
     /**
      * Load and display stored chat history from RxDB.
@@ -666,21 +487,20 @@ export class App implements OnDestroy {
      */
     public async showChatHistory(): Promise<void> {
         if (!this.db) {
-            console.error('RxDB instance not initialized');
+            console.error('Dexie DB not initialized');
             return;
         }
         try {
             const year: number = new Date().getFullYear();
-            const docs = await this.db.chatMessages.find({
-                selector: { year: year },
-                index: ['year']
-            }).exec();
+            const docs = await this.db.chatMessages.where('year').equals(year).toArray();
             let html = "<u>Recent Messages:</u> <br>";
             let count = 0;
+            // Reverse docs
+            docs.reverse();
 
-            // Optionally clear previous entries except intro info
-            // Append each year's messages
             for (const doc of docs) {
+                //Reverse msgs
+                doc.messages.reverse();
                 for (const msg of doc.messages) {
                     html += `•\x20${msg.content}<br/>`;
                     count++;
@@ -690,9 +510,8 @@ export class App implements OnDestroy {
             }
             if (count === 0) html += "(No messages yet)<br/>";
             this.msgBox.showMsg(html);
-        }
-        catch (e) {
-            console.error('Failed to load chat history from RxDB', e);
+        } catch (e) {
+            console.error('Failed to load chat history from Dexie', e);
         }
     }
 
@@ -729,23 +548,159 @@ export class App implements OnDestroy {
         }
         // console.log('Custom app added:', name, url);
 
-        // Store custom apps in localStorage.customApps array
-        let customApps: any[] = [];
-        const stored = localStorage.getItem('customApps');
-
-        if (stored) {
-            try { customApps = JSON.parse(stored); } catch { customApps = []; }
+        // Store custom apps in Dexie `customApps` table and keep localStorage for backward compatibility
+        // First, add to Dexie
+        if (this.db && this.db.customApps) {
+            try {
+                // Generate a simple id if not provided
+                const id = (window as any).new_id ? (window as any).new_id() : `${Date.now()}`;
+                await this.db.customApps.add({ id, name, url, integrated: false, internal: false, custom: true });
+            } catch (e) {
+                console.error('Failed to add custom app to Dexie', e);
+            }
         }
-        // Create app object
-        customApps.push({ name, url });
-        localStorage.setItem('customApps', JSON.stringify(customApps));
+        // Legacy localStorage persistence removed – Dexie is now the sole source of truth for custom apps.
         this.toggleApps();
     }
 
+    public commonFtsCache: any = null;
+    public commonIndex: any = null;
+
+    //
+    async mountCommonIndex(): Promise<any> {
+        this.commonFtsCache = new FlexSearch.IndexedDB("Cache");
+        const commonIndex = new FlexSearch.Document({
+            // Basic configuration – can be tuned later
+            tokenize: "forward",
+            // Encode function to normalize text to lower case and split into tokens
+            encode: (text: string) => text.toLowerCase().split(/\s+/),
+            document: {
+                // The unique identifier for each document
+                id: "path",
+                // Fields to be indexed
+                index: ["content", "folderId"]
+            }
+        });
+        await commonIndex.mount(this.commonFtsCache);
+        return commonIndex;
+    }
+
+    //
+    /**
+     * Indexes all markdown files within the provided directory handle using FlexSearch.
+     *
+     * @param dirHandle - A FileSystemDirectoryHandle obtained via the File System Access API.
+     */
+    async indexFts(dirHandle: any, folderId: string): Promise<void> {
+        // Create a FlexSearch index named 'commonIndex'
+        // Use FlexSearch Document for indexing with fields
+        var commonIndex = await this.mountCommonIndex();
+
+        /**
+         * Recursively walk through a directory and collect markdown file handles.
+         */
+        const walk = async (handle: any, pathPrefix: string = "") => {
+            for await (const entry of handle.values()) {
+                const entryPath = pathPrefix ? `${pathPrefix}/${entry.name}` : entry.name;
+
+                if (entry.kind === "file" && entry.name.endsWith('.md')) {
+                    try {
+                        const file = await entry.getFile();
+                        const text = await file.text();
+                        // Add to FlexSearch index – using the file path as the document id
+                        // Add document to the index: first argument is the id, second is the fields object
+                        commonIndex.add(entryPath, { content: text, folderId: folderId });
+                    } catch (e) {
+                        console.error('Failed to read markdown file', entryPath, e);
+                    }
+                } else if (entry.kind === "directory") {
+                    // Recurse into sub‑directory
+                    await walk(entry, entryPath);
+                }
+            }
+        };
+
+        try {
+            await walk(dirHandle, folderId);
+            // Store the index on the component instance for later use (optional)
+            (this as any).commonIndex = commonIndex;
+            this.toast.success('Indexed markdown files for full‑text search');
+        } catch (e) {
+            console.error('Error while indexing files', e);
+            this.toast.info('Failed to build search index');
+        }
+        commonIndex.commit();
+    }
+
     async chooseData(): Promise<void> {
+        // Inform the user about the action
         await this.msgBox.showMsg("Now choose a folder with data for AI to read, for example, " +
             "the folders used for the built-in Notebook app.<br>" +
             "This folder will be added to a list of data folders.");
+
+        // Prompt the user to pick a directory using the File System Access API
+        let dirHandle: any;
+
+        try {
+            // @ts-ignore – showDirectoryPicker may not be in TypeScript lib
+            dirHandle = await (window as any).showDirectoryPicker();
+        } catch (e) {
+            console.error('Directory picker cancelled or not supported', e);
+            this.toast.info('Directory selection cancelled');
+            return;
+        }
+        if (!dirHandle) {
+            this.toast.info('No directory selected');
+            return;
+        }
+        // Previously used the directory name as the folder ID.
+        // Now read the identifier from the marker file "aimav-folder.id" located inside the selected folder.
+        let folderId: string;
+
+        try {
+            const idFileHandle = await dirHandle.getFileHandle('aimav-folder.id');
+            const file = await idFileHandle.getFile();
+            folderId = await file.text();
+            folderId = folderId.trim();
+            log("Folder id:", folderId);
+        } catch (e) {
+            // If the marker file cannot be read, fall back to using the directory name.
+            console.warn('Failed to read aimav-folder.id, falling back to directory name', e);
+            // @ts-ignore
+            folderId = window.new_id();
+            log("NEW folder id:", folderId);
+
+            const fileHandle = await dirHandle.getFileHandle('aimav-folder.id', { create: true });
+            const writable = await fileHandle.createWritable();
+            const newId = folderId;
+            await writable.write(newId);
+            await writable.close();
+        }
+
+        // Check if this folder is already recorded in Dexie
+        let alreadySaved = false;
+
+        if (this.db && this.db.dataFolders) {
+            const existing = await this.db.dataFolders.where('id').equals(folderId).first();
+            alreadySaved = existing != null;
+        }
+
+        // Only proceed if the folder is not yet saved
+        if (!alreadySaved) {
+            // Save the directory handle to Dexie
+            try {
+                await this.db.dataFolders.add({ id: folderId, handle: dirHandle });
+            } catch (e) {
+                console.error('Failed to save data folder handle', e);
+                this.toast.info('Failed to save folder');
+                return;
+            }
+            this.toast.success('Data folder added successfully');
+        } else {
+            this.toast.info('Folder already added');
+        }
+        dirHandle.requestPermission({ mode: "readwrite" });
+        this.indexFts(dirHandle, folderId);
     }
 
     async removeFromCategory(app: any): Promise<void> {
@@ -766,31 +721,28 @@ export class App implements OnDestroy {
 
         // Find the category document matching the selected category name
         const catDoc = await this.db.appCategories
-            .findOne({ selector: { categoryName: { $eq: selectedCategory } } })
-            .exec();
+            .where('categoryName')
+            .equals(selectedCategory)
+            .first();
 
         if (!catDoc) {
             this.toast.info(`Category ${selectedCategory} not found`);
             return;
         }
-
         if (!catDoc.apps || catDoc.apps.length === 0) {
             this.toast.info(`No apps in category ${selectedCategory}`);
             return;
         }
-
-        // Find index of app with matching URL
         const index = catDoc.apps.findIndex((a: any) => a.url === app.url);
-
         if (index === -1) {
             this.toast.info('App not found in selected category');
             return;
         }
-
-        // Remove the app from the array and patch the document
         const newApps = catDoc.apps.slice();
         newApps.splice(index, 1);
-        await catDoc.patch({ apps: newApps });
+        await this.db.appCategories.put({ ...catDoc, apps: newApps });
+        this.igSync.markChanged(DB_NAME, "appCategories", catDoc.id);
+
         this.toast.info(`Removed app from ${selectedCategory}`);
     }
 
@@ -821,13 +773,11 @@ export class App implements OnDestroy {
         const normalized = newName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
 
         // Find the existing category document
+        // Dexie does not support findOne; use where + equals + first() to fetch the document
         const catDoc = await this.db.appCategories
-            .findOne({
-                selector: {
-                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
-                }
-            })
-            .exec();
+            .where('categoryName')
+            .equals(this.selectedCategory.toLowerCase())
+            .first();
 
         if (!catDoc) {
             this.toast.info(`Category ${this.selectedCategory} not found`);
@@ -836,7 +786,10 @@ export class App implements OnDestroy {
         }
 
         // Update the categoryName field
-        await catDoc.patch({ categoryName: normalized });
+        // Dexie collection documents do not have a .patch() method. Use the table's update method instead.
+        await this.db.appCategories.update(catDoc.id, { categoryName: normalized });
+        this.igSync.markChanged(DB_NAME, "appCategories", catDoc.id);
+
         // Update UI state
         this.selectedCategory = newName;
         this.toast.success('Category name updated');
@@ -862,13 +815,11 @@ export class App implements OnDestroy {
         }
 
         // Find the existing category document
+        // Dexie does not support findOne; use where + equals + first()
         const catDoc = await this.db.appCategories
-            .findOne({
-                selector: {
-                    categoryName: { $eq: this.selectedCategory.toLowerCase() }
-                }
-            })
-            .exec();
+            .where('categoryName')
+            .equals(this.selectedCategory.toLowerCase())
+            .first();
 
         if (!catDoc) {
             this.toast.info(`Category ${this.selectedCategory} not found`);
@@ -876,8 +827,10 @@ export class App implements OnDestroy {
             return;
         }
 
-        // Del
-        await catDoc.remove();
+        // Delete the category document using Dexie's delete method
+        await this.db.appCategories.delete(catDoc.id);
+        this.igSync.markChanged(DB_NAME, "appCategories", catDoc.id, "deleted");
+
         // Update UI state
         this.selectedCategory = "";
         this.toast.success('Category deleted');
@@ -899,11 +852,12 @@ export class App implements OnDestroy {
         if (useExisting === 'yes') {
             // Retrieve all category names from RxDB
             if (!this.db || !this.db.appCategories) {
-                console.error('RxDB not initialized or appCategories collection missing');
+                console.error('Dexie DB not initialized or appCategories table missing');
                 this.toggleApps();
                 return;
             }
-            const docs = await this.db.appCategories.find().exec();
+            // Dexie does not have a .find() method; retrieve all category documents via toArray()
+            const docs = await this.db.appCategories.toArray();
             const options: { [key: string]: string } = {};
             docs.forEach((doc: any) => {
                 const name = (doc.categoryName as string).toLowerCase();
@@ -941,7 +895,11 @@ export class App implements OnDestroy {
         categoryName = categoryName.toLowerCase().trim().replace(/[\s]{2,}/g, '\x20');
 
         // Find existing category document
-        const existing = await this.db.appCategories.findOne({ selector: { categoryName } }).exec();
+        // Dexie does not support findOne; use where + equals + first()
+        const existing = await this.db.appCategories
+            .where('categoryName')
+            .equals(categoryName)
+            .first();
         const appInfo = { idstr: app.id, name: app.name, url: app.url, icon: app.icon };
         log(existing)
         log(appInfo)
@@ -954,26 +912,31 @@ export class App implements OnDestroy {
             const already = existing.apps.find((a: any) => a.idstr === app.id);
 
             if (!already) {
-                // existing.apps.push(appInfo);
-                await existing.patch({
+                // Update the existing document by adding the new appInfo to the apps array.
+                // Dexie does not provide a .patch() method; use the table's .update() instead.
+                await this.db.appCategories.update(existing.id, {
                     apps: [...existing.apps, appInfo]
                 });
+                this.igSync.markChanged(DB_NAME, "appCategories", existing.id);
 
-                // Update tokens for search (simple tokenization)
-                // existing.tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
-                // await existing.save();
+                // Optionally, update the search tokens as well.
+                // await this.db.appCategories.update(existing.id, {
+                //     tokens: this.tokenize(`${categoryName} ${app.name} ${app.url}`)
+                // });
             }
         }
         else {
             // Create new category document
             const id = (window as any).new_id ? (window as any).new_id() : `${Date.now()}`;
             const tokens = this.tokenize(`${categoryName} ${app.name} ${app.url}`);
-            await this.db.appCategories.insert({
+            // Dexie uses add for inserting new records into a table.
+            await this.db.appCategories.add({
                 id,
                 categoryName,
                 tokens,
                 apps: [appInfo]
             });
+            this.igSync.markChanged(DB_NAME, "appCategories", id);
         }
         this.toggleApps();
     }
@@ -1002,56 +965,50 @@ export class App implements OnDestroy {
     }
 
     protected pinApp(app: any): void {
-        // Retrieve existing pinned apps from localStorage or initialize empty array
-        const stored = localStorage.getItem('pinnedApps');
-        let pinned: any[] = [];
-
-        if (stored) {
-            try {
-                pinned = JSON.parse(stored);
-                if (!Array.isArray(pinned)) pinned = [];
-            } catch {
-                pinned = [];
-            }
+        // Persist pinned app using Dexie only. LocalStorage is no longer used for pinned apps.
+        if (this.db && this.db.pinnedApps) {
+            (async () => {
+                try {
+                    // Avoid duplicate entries based on the app's URL.
+                    const existing = await this.db.pinnedApps
+                        .where('url')
+                        .equals(app.url)
+                        .first();
+                    if (!existing) {
+                        await this.db.pinnedApps.add(app);
+                        this.igSync.markChanged(DB_NAME, "pinnedApps", app.id);
+                    }
+                } catch (e) {
+                    console.error('Error adding pinned app to Dexie', e);
+                }
+            })();
         }
-        // Ensure the app has an identifier (use id property if present, otherwise the whole object)
-        const appId = app?.id ?? null;
-
-        // Add if not already present
-        if (appId != null && !pinned.includes(appId)) {
-            pinned.push(appId);
-        }
-        // Save back to localStorage
-        localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+        // Refresh UI after pinning.
         this.resetAppFilter();
     }
 
-    protected unpinApp(app: any): void {
-        // Retrieve existing pinned apps from localStorage or initialize empty array
-        const stored = localStorage.getItem('pinnedApps');
-        let pinned: any[] = [];
-
-        if (stored) {
+    // 
+    protected async unpinApp(app: any): Promise<void> {
+        // Remove the pinned app using Dexie. LocalStorage is no longer the source of truth.
+        if (this.db && this.db.pinnedApps) {
             try {
-                pinned = JSON.parse(stored);
-                if (!Array.isArray(pinned)) pinned = [];
-            } catch {
-                pinned = [];
+                // Delete the specific app entry by its unique identifier (id or url).
+                // Prefer id if present, otherwise fall back to url.
+                const query = app.id ? this.db.pinnedApps.where('id').equals(app.id) : this.db.pinnedApps.where('url').equals(app.url);
+                const existing = await query.first();
+                if (existing) {
+                    await query.delete();
+                    this.igSync.markDeleted(DB_NAME, "pinnedApps", existing.id);
+                }
+            } catch (e) {
+                console.error('Error removing pinned app from Dexie', e);
             }
         }
-        // Determine the identifier used for the app (same logic as pinApp)
-        const appId = app?.id ?? null;
-        // Remove the appId if present
-        const index = pinned.indexOf(appId);
-
-        if (index !== -1) {
-            pinned.splice(index, 1);
-        }
-        // Save the updated list back to localStorage
-        localStorage.setItem('pinnedApps', JSON.stringify(pinned));
+        // Refresh UI filters to reflect the change.
         this.resetAppFilter();
     }
 
+    // Ensure proper spacing before the next member as per coding conventions
     menuPosition = { x: '0px', y: '0px' };
 
     /** Handle right‑click on an app tile to show the context menu */
@@ -1215,66 +1172,223 @@ export class App implements OnDestroy {
         return tokens.filter(t => t.length > 0);
     }
 
-    public async sendMessage(ev: Event) {
-        ev.preventDefault();
-        const message = this.chatInput();
+    public aiModel = null;
 
-        // Save the user's message to IndexedDB using RxDB
-        // Store the message grouped by year. If a record for the current year exists,
-        // push the new message into its `messages` array; otherwise create a new record.
+    //
+    public async loadModel(event: Event): Promise<void> {
+        event?.preventDefault?.();
+        // await this.msgBox.showMsg("Pick the model file downloaded");
+        if (this.aiModel != null) {
+            this.msgBox.showMsg("Model is already loaded");
+            return;
+        }
+        // Pick model file
         try {
-            const currentYear = new Date().getFullYear();
-            // Prepare the new message object and compute token array from its content
-            const tokenArray = this.normalise(message).split(' ');
-            const newMsg = {
-                // @ts-ignore – window.new_id is defined globally
-                idstr: (window as any).new_id(),
-                content: message,
-                timestamp: Date.now()
-            };
+            const [fileHandle] = await (window as any).showOpenFilePicker({
+                types: [{
+                    description: 'Gemma Model',
+                    accept: { 'application/octet-stream': ['.task'] }
+                }],
+                excludeAcceptAllOption: true,
+                multiple: false
+            });
+            this.toast.info("Loading file");
+            const file = await fileHandle.getFile();
+            const modelBuffer = await file.arrayBuffer();
 
-            // Attempt to fetch an existing year record using RxDB query
-            const existingDoc = await this.db.chatMessages.findOne({
-                selector: { year: currentYear }
-            }).exec();
+            const {
+                FilesetResolver,
+                LlmInference
+            } = mpModule;
+            this.toast.info("Initializing MediaPipe");
+            const genai = await FilesetResolver.forGenAiTasks(
+                'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-genai/wasm'
+            );
 
-            if (existingDoc) {
-                const msgs = existingDoc.get('messages') as any[];
-                const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
-                // Update tokens field by appending tokens from the new message
-                const existingTokens = existingDoc.get('tokens') as any[] || [];
-                const updatedTokens = Array.isArray(existingTokens) ? [...existingTokens, ...tokenArray] : [...tokenArray];
-                await existingDoc.update({ $set: { messages: updatedMsgs, tokens: updatedTokens } });
-            }
-            else {
-                // No record for this year yet – insert a new document
-                // Generate a unique id for the document (e.g., using timestamp and year)
-                // @ts-ignore
-                const docId = window.new_id();
-                await this.db.chatMessages.insert({
-                    id: docId,
-                    year: currentYear,
-                    messages: [newMsg],
-                    tokens: tokenArray
-                });
+            this.toast.info("Creating LLM");
+            const llm = await LlmInference.createFromOptions(genai, {
+                baseOptions: {
+                    modelAssetBuffer: new Uint8Array(modelBuffer)
+                },
+                maxTokens: 24 * 1000, // max all:32k, max out:8k
+                // preferredBackend: 'GPU'
+            });
+            (this as any).aiModel = llm;
+            this.toast.success('LLM loaded successfully');
+
+            const input = (event.target as HTMLElement).ownerDocument.getElementById('input-ai-key') as HTMLInputElement | null;
+
+            if (input) {
+                input.value = fileHandle.name;
+                this.modelName = fileHandle.name;
             }
         }
         catch (e) {
-            console.error('Failed to store chat message in IndexedDB via RxDB', e);
+            console.error('Failed to load AI model', e);
+            this.toast.info('Failed to load model');
+        }
+    }
+
+    //
+    public async readRagTextFile(path: any): Promise<string> {
+        var toks = path.split("/");
+        var folderId = toks[0];
+        var innerPath = toks.slice(1);
+        log("Folder id", folderId); // Used during FTS, can't use after re-select folder
+        const folders = await this.db.dataFolders.toArray();
+
+        if (folders == null || folders.length == 0) {
+            console.warn("No content folders", folders);
+            return "";
         }
 
-        // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
-        if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
-            const entry = document.createElement('div');
-            entry.innerHTML = `<h1 style="border-left:1px solid silver;">&nbsp;</h1><b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
-            this.chatLogDiv.nativeElement.appendChild(entry);
-            this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+        // Find first matching the file path
+        for (let folder of folders) {
+            const dirHandle = folder.handle;
+            dirHandle.requestPermission({ mode: "readwrite" });
+            log("Inner path", innerPath);
+
+            // Follow the innerPath items starting from dirHandle to locate the file.
+            // The last token in innerPath is the file name. We traverse directories
+            // using the File System Access API. If any step fails we return an empty
+            // string so callers can handle the missing file gracefully.
+            try {
+                let currentHandle: any = dirHandle;
+                log("Top Dir:", currentHandle.name);
+
+                // Iterate over each segment; the last segment is the file name.
+                for (let i = 0; i < innerPath.length; i++) {
+                    const segment = innerPath[i];
+                    const isFile = i === innerPath.length - 1;
+
+                    if (isFile) {
+                        log("File:", segment);
+                        // Get the file handle and read its text content.
+                        const fileHandle = await currentHandle.getFileHandle(segment);
+                        const file = await fileHandle.getFile();
+                        return await file.text();
+                    } else {
+                        log("Dir:", segment);
+                        // Descend into the sub‑directory.
+                        currentHandle = await currentHandle.getDirectoryHandle(segment);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to read RAG text file', e);
+            }
         }
-        // Clear the input field
-        this.chatInput.set("");
+        return "";
+    }
 
-        this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
+    // 
+    /**
+     * Sends a prompt to the locally loaded LLM model (aiModel) and displays the response.
+     * The model is created elsewhere via LlmInference.createFromOptions and stored in `aiModel`.
+     */
+    public async askLocalModel(message: string, ragDocs: string[] = []): Promise<void> {
+        if (this.aiModel == null) {
+            this.msgBox.showMsg("AI Model not loaded.");
+            return;
+        }
+        var tokCount = (this.aiModel as any).sizeInTokens(message);
+        console.log("Input tokens:", tokCount);
 
+        for (let i = 0; i < ragDocs.length; i++)
+            ragDocs[i] = ragDocs[i].split("/").slice(1).join("/");
+
+        // Gemma 3 270m&1B has shared pool for in toks, out toks: 32k
+        // out should be at least 8k
+        if (tokCount > (32 * 1000) - (8 * 1000)) {
+            this.msgBox.showMsg("Too large message to be processed by local AI model.");
+            return;
+        }
+
+        // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+        const converter = new (window as any).showdown.Converter({
+            tables: true
+        });
+        var manuallyScrolled = false;
+        this.chatLogDiv.nativeElement.addEventListener('wheel', (ev: Event) => {
+            manuallyScrolled = true;
+        });
+
+        // Show a temporary "Asking model..." message in the chat log
+        const askingDiv = document.createElement('div');
+        askingDiv.textContent = 'Asking model...';
+        this.chatLogDiv.nativeElement.appendChild(askingDiv);
+
+        try {
+            // Stream response chunks to console before processing
+            let streamedText = '';
+            // Create a temporary streaming block in the chat log
+            const streamingDiv = document.createElement('div');
+            streamingDiv.className = 'streaming';
+            this.chatLogDiv.nativeElement.appendChild(streamingDiv);
+
+            // Gemma 3 tags, gemma 4 is different (eg. <|turn>, <turn|>...)
+            var xmlPrompt =
+                `<bos><start_of_turn>user\n` +
+                `${message.trim()}\n` +
+                `<end_of_turn>\n` +
+                `<start_of_turn>model\n`;
+
+            // @ts-ignore
+            var [lock, unlock] = new_lock();
+            // Can't 'await' together with callback(?), errors. 
+            (this.aiModel as any).generateResponse(xmlPrompt, (chunk: any, done: boolean) => {
+                if (done == true) unlock();
+                if (chunk.trim().length == 0) return;
+                // console.log('Stream chunk:', chunk);
+                streamedText += chunk;
+
+                // Convert streamed markdown to HTML and display in the streaming block
+                try {
+                    // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+                    const html = converter.makeHtml(streamedText);
+                    streamingDiv.innerHTML = `<strong>AI</strong> <small>(${this.modelName})</small>: ${html}`;
+
+                    if (!manuallyScrolled)
+                        this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+                } catch (e) {
+                    console.error('Error converting markdown to HTML:', e);
+                }
+            });
+            await lock;
+            streamingDiv.remove();
+
+            // Convert AI response markdown to HTML using Showdown
+            try {
+                // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
+                const aiMessage = streamedText;
+                var html = converter.makeHtml(aiMessage);
+                html += `<div>
+                    <small><small>Answered by ${this.modelName}</small></small><br>
+                    <small><small>Files: ${ragDocs.join(", ")}</small></small>
+                </div>`;
+                const aiDiv = document.createElement('div');
+                aiDiv.innerHTML = `<strong>AI</strong> <small>(${this.modelName})</small>: ${html}`;
+                this.chatLogDiv.nativeElement.appendChild(aiDiv);
+                this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+            } catch (e) {
+                console.error('Error converting markdown to HTML:', e);
+            }
+            // Remove the "Asking model..." placeholder after receiving response
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
+            }
+        } catch (err) {
+            console.error('Error calling model:', err);
+            // Ensure placeholder is removed even on error
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
+            }
+        }
+    } // askLocalModel
+
+    public modelName: string = "";
+
+    // Unused, unsure providers to send user's data to.
+    public async askOpenRouter(message: string): Promise<void> {
         // Send the message to OpenRouter if an API key is stored
         const apiKey = localStorage.getItem('aiKey');
         var modelName = null;
@@ -1292,115 +1406,280 @@ export class App implements OnDestroy {
             this.msgBox.showMsg("Please get AI key and save it on right column first.")
             return;
         }
-        if (apiKey) {
-            // Show a temporary "Asking model..." message in the chat log
-            const askingDiv = document.createElement('div');
-            askingDiv.textContent = 'Asking model...';
-            this.chatLogDiv.nativeElement.appendChild(askingDiv);
-            try {
-                const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${apiKey}`,
-                        'Accept': 'text/event-stream',
-                    },
-                    body: JSON.stringify({
-                        model: CURRENT_MODEL,
-                        messages: [{ role: 'user', content: message }],
-                        stream: true
-                    }),
-                });
+        // Show a temporary "Asking model..." message in the chat log
+        const askingDiv = document.createElement('div');
+        askingDiv.textContent = 'Asking model...';
+        this.chatLogDiv.nativeElement.appendChild(askingDiv);
 
-                // Stream response chunks to console before processing
-                const reader = response.body?.getReader();
-                const decoder = new TextDecoder('utf-8');
-                let streamedText = '';
-                // Create a temporary streaming block in the chat log
-                const streamingDiv = document.createElement('div');
-                streamingDiv.className = 'streaming';
-                this.chatLogDiv.nativeElement.appendChild(streamingDiv);
+        try {
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Accept': 'text/event-stream',
+                },
+                body: JSON.stringify({
+                    model: CURRENT_MODEL,
+                    messages: [{ role: 'user', content: message }],
+                    stream: true
+                }),
+            });
 
-                if (reader) {
-                    while (true) {
-                        const v = await reader.read();
-                        const { done, value } = v;
-                        if (done) break;
+            // Stream response chunks to console before processing
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder('utf-8');
+            let streamedText = '';
+            // Create a temporary streaming block in the chat log
+            const streamingDiv = document.createElement('div');
+            streamingDiv.className = 'streaming';
+            this.chatLogDiv.nativeElement.appendChild(streamingDiv);
 
-                        const chunk = decoder.decode(value, { stream: true });
-                        if (chunk.trim().length == 0) continue;
-                        if (!chunk.startsWith("data:")) continue;
-                        // console.log('Stream chunk:', chunk);
+            if (reader) {
+                while (true) {
+                    const v = await reader.read();
+                    const { done, value } = v;
+                    if (done) break;
 
-                        let parts = chunk.split("\n");
+                    const chunk = decoder.decode(value, { stream: true });
+                    if (chunk.trim().length == 0) continue;
+                    if (!chunk.startsWith("data:")) continue;
+                    // console.log('Stream chunk:', chunk);
 
-                        for (let p of parts) {
-                            p = p.slice(5).trim();
-                            if (p == "[DONE]") break;
-                            if (p.trim().length == 0) continue;
-                            let obj;
+                    let parts = chunk.split("\n");
 
-                            try {
-                                obj = JSON.parse(p);
-                                streamedText += obj.choices[0].delta.content;
-                            }
-                            catch {
-                                // streamedText += `\n[A-CHUNK]\n`;
-                                streamedText += `...\x20`;
-                            }
-                            if (modelName == null && obj.model != null)
-                                modelName = obj.model;
-                        }
+                    for (let p of parts) {
+                        p = p.slice(5).trim();
+                        if (p == "[DONE]") break;
+                        if (p.trim().length == 0) continue;
+                        let obj;
 
-                        // Convert streamed markdown to HTML and display in the streaming block
                         try {
-                            // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
-                            const html = converter.makeHtml(streamedText);
-                            streamingDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
-
-                            if (!manuallyScrolled)
-                                this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
-
-                            if (modelName == null) {
-                                log("Null response from openrouter");
-                                this.chatInput.set(message.trim());
-                            }
-                        } catch (e) {
-                            console.error('Error converting markdown to HTML:', e);
+                            obj = JSON.parse(p);
+                            streamedText += obj.choices[0].delta.content;
                         }
+                        catch {
+                            // streamedText += `\n[A-CHUNK]\n`;
+                            streamedText += `...\x20`;
+                        }
+                        if (modelName == null && obj.model != null)
+                            modelName = obj.model;
                     }
-                    streamingDiv.remove();
-                }
 
-                // Convert AI response markdown to HTML using Showdown
-                try {
-                    // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
-                    const aiMessage = streamedText;
-                    var html = converter.makeHtml(aiMessage);
-                    html += `<div><small>(Answered by ${modelName})</small></div>`;
-                    const aiDiv = document.createElement('div');
-                    aiDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
-                    this.chatLogDiv.nativeElement.appendChild(aiDiv);
-                    this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+                    // Convert streamed markdown to HTML and display in the streaming block
+                    try {
+                        // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js
+                        const html = converter.makeHtml(streamedText);
+                        streamingDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
 
-                    if (modelName == null) {
-                        log("Null response from openrouter");
-                        this.chatInput.set(message.trim());
+                        if (!manuallyScrolled)
+                            this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+
+                        if (modelName == null) {
+                            log("Null response from openrouter");
+                            this.chatInput.set(message.trim());
+                        }
+                    } catch (e) {
+                        console.error('Error converting markdown to HTML:', e);
                     }
-                } catch (e) {
-                    console.error('Error converting markdown to HTML:', e);
                 }
-                // Remove the "Asking model..." placeholder after receiving response
-                if (askingDiv.parentNode) {
-                    askingDiv.parentNode.removeChild(askingDiv);
-                }
-            } catch (err) {
-                console.error('Error calling OpenRouter:', err);
-                // Ensure placeholder is removed even on error
-                if (askingDiv.parentNode) {
-                    askingDiv.parentNode.removeChild(askingDiv);
-                }
+                streamingDiv.remove();
             }
+
+            // Convert AI response markdown to HTML using Showdown
+            try {
+                // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
+                const aiMessage = streamedText;
+                var html = converter.makeHtml(aiMessage);
+                html += `<div><small>(Answered by ${modelName})</small></div>`;
+                const aiDiv = document.createElement('div');
+                aiDiv.innerHTML = `<strong>AI</strong> <small>(${modelName})</small>: ${html}`;
+                this.chatLogDiv.nativeElement.appendChild(aiDiv);
+                this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+
+                if (modelName == null) {
+                    log("Null response from openrouter");
+                    this.chatInput.set(message.trim());
+                }
+            } catch (e) {
+                console.error('Error converting markdown to HTML:', e);
+            }
+            // Remove the "Asking model..." placeholder after receiving response
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
+            }
+        } catch (err) {
+            console.error('Error calling OpenRouter:', err);
+            // Ensure placeholder is removed even on error
+            if (askingDiv.parentNode) {
+                askingDiv.parentNode.removeChild(askingDiv);
+            }
+        }
+    }
+
+    // 
+    public async calcRelationScore(message: string, text: string): Promise<number> {
+        // Get score from openrouter (openai) with a prompt asking to score the relation between message and text
+        try {
+            const prompt =
+                `Analyze the relationship between the following message and text.\n` +
+                `Provide a score between 0 and 10, where 0 means no relation and 10 means strong relation.\n` +
+                `Message: ${message}\n` +
+                `Text: ${text}\n\n` +
+                `Return the score numeric value only, without any explanation.`;
+            // @ts-ignore
+            let scoreText = await this.aiModel.generateResponse(prompt);
+            scoreText = scoreText.replace(/[^0-9.]/g, "");
+            if (scoreText == null || scoreText.length == 0) scoreText = "0";
+            const score = parseFloat(scoreText);
+
+            if (Number.isNaN(score)) {
+                console.error('Invalid score from AI:', scoreText);
+                return 0;
+            }
+            return score;
+        } catch (err) {
+            console.error('Error calling AI:', err);
+            return 0;
+        }
+    }
+
+    //
+    public async sendMessage(ev: Event) {
+        ev.preventDefault();
+        const message = this.chatInput();
+
+        if (this.aiModel == null) {
+            this.msgBox.showMsg("AI model is not loaded, please load it first");
+            return;
+        }
+
+        // Save the user's message to IndexedDB using RxDB
+        // Store the message grouped by year. If a record for the current year exists,
+        // push the new message into its `messages` array; otherwise create a new record.
+        try {
+            const currentYear = new Date().getFullYear();
+            // Prepare the new message object and compute token array from its content
+            const tokenArray = this.normalise(message).split(' ');
+            const newMsg = {
+                // @ts-ignore – window.new_id is defined globally
+                idstr: (window as any).new_id(),
+                content: message,
+                timestamp: Date.now()
+            };
+
+            // Attempt to fetch an existing year record using RxDB query
+            // Dexie does not support findOne; use where().equals().first() to fetch the record for the current year
+            const existingDoc = await this.db.chatMessages.where('year').equals(currentYear).first();
+
+            if (existingDoc) {
+                // Dexie returns plain objects; access fields directly
+                const msgs = (existingDoc as any).messages as any[];
+                const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
+                // Update tokens field by appending tokens from the new message
+                const existingTokens = (existingDoc as any).tokens as any[] || [];
+                const updatedTokens = Array.isArray(existingTokens) ? [...existingTokens, ...tokenArray] : [...tokenArray];
+                // Use Dexie's modify to update the existing record
+                await this.db.chatMessages.where('year').equals(currentYear).modify({
+                    messages: updatedMsgs,
+                    tokens: updatedTokens
+                });
+                this.igSync.markChanged(DB_NAME, "chatMessages", existingDoc.id);
+            }
+            else {
+                // No record for this year yet – insert a new document
+                // Generate a unique id for the document (e.g., using timestamp and year)
+                // @ts-ignore
+                const docId = window.new_id();
+                // Dexie uses add/put for inserting new records. Use add to create a new document.
+                await this.db.chatMessages.add({
+                    id: docId,
+                    year: currentYear,
+                    messages: [newMsg],
+                    tokens: tokenArray
+                });
+                this.igSync.markChanged(DB_NAME, "chatMessages", docId);
+            }
+        }
+        catch (e) {
+            console.error('Failed to store chat message in IndexedDB via RxDB', e);
+        }
+
+        // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
+        if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
+            const entry = document.createElement('div');
+            entry.innerHTML = `<h1 style="border-left:1px solid silver;">&nbsp;</h1><b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
+            this.chatLogDiv.nativeElement.appendChild(entry);
+            this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+        }
+        // Clear the input field
+        this.chatInput.set("");
+        this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
+        var filePaths: string[] = [];
+
+        // Use FlexSearch cache to find items matching the message
+        try {
+            // Perform a search on the common FlexSearch cache using the user's message
+            // FlexSearch.IndexedDB does not have a typed `search` method in the current typings,
+            // so we cast to `any` to bypass the TypeScript error while still invoking the runtime method.
+            // Use the FlexSearch Document index for searching instead of the IndexedDB cache,
+            // which does not provide a .search method. The index was stored on the component
+            // instance as `commonIndex` during indexing.
+            this.commonIndex = await this.mountCommonIndex();
+            const ftsResults = await (this as any).commonIndex.search(message, {
+                suggest: true
+            });
+            log("FTS Results:", ftsResults);
+
+            if (ftsResults && ftsResults.length) {
+                // Show a toast with the number of matches found
+                this.toast.info(`FlexSearch found ${ftsResults.length} matching item(s)`);
+                // Optionally, you could log the result IDs for debugging
+                let contentRes = ftsResults.filter((x: any) => x.field == "content")[0];
+                // @ts-ignore
+                filePaths = [...new Set(contentRes.result)].slice(0, 5);
+                console.log('FlexSearch results:', filePaths);
+            } else {
+                this.toast.info('FlexSearch found no matching items');
+                console.warn('FlexSearch found no matching items');
+            }
+        } catch (e) {
+            console.error('Error searching FlexSearch cache', e);
+            this.toast.info('Error performing search');
+        }
+        // await this.askOpenRouter(message);
+        log("Rag path:", filePaths);
+
+        if (filePaths.length == 0)
+            await this.askLocalModel(message);
+        else {
+            let ragTexts = [];
+
+            for (let p of filePaths) {
+                let ragText = await this.readRagTextFile(p);
+                let obj = { path: p, text: ragText, score: 0 };
+                obj.score = await this.calcRelationScore(message, ragText);
+                ragTexts.push(obj);
+            }
+            ragTexts.sort((a, b) => b.score - a.score);
+            // @ts-ignore
+            log("All rag texts: ", ragTexts.map(t => {
+                // @ts-ignore
+                return { path: t.path, score: t.score }
+            }));
+            // @ts-ignore
+            log("Top rag text:", ragTexts[0]);
+
+            // Get top doc
+            let ragText = ragTexts[0].text;
+
+            // @ts-ignore
+            while (this.aiModel.sizeInTokens(ragText) > MAX_INP_TOKENS) {
+                ragText = ragText.trim().replace(/\s\S+$/, "");
+            }
+            let textPrompt = `${ragText.trim()}\n\n${message}`;
+            // log("RAG Prompt: ", textPrompt);
+            await this.askLocalModel(textPrompt, [ragTexts[0].path]);
         }
     }
 
@@ -1415,16 +1694,11 @@ export class App implements OnDestroy {
         // Sort apps: internal apps first, then alphabetically by name
         this.apps = this.sortApps(this.apps);
 
-        const storageWithValidation = wrappedValidateAjvStorage({
-            storage: getRxStorageDexie()
-        });
-        // Initialise RxDB and store the instance on the component for later use
-        this.db = await createRxDatabase({
-            name: 'aimav',
-            storage: storageWithValidation
-        });
-
-        await this.db.addCollections(RXDB_SCHEMAS);
+        // Initialise Dexie database instance
+        this.db = new AppDexie();
+        // @ts-ignore
+        log("This device id:", localStorage.deviceId);
+        this.msgBox.showMsg("You should click Sync Data now to get data modified on other devices");
     }
 
     /**
@@ -1437,6 +1711,37 @@ export class App implements OnDestroy {
         }
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

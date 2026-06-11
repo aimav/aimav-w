@@ -39,7 +39,9 @@ body {
     border-radius: 1rem;
     padding-left: 1rem;
 }
-
+.chat-log table tr, .chat-log table td {
+    border:1px solid silver;
+}
 /* Marker for internal apps: letter A inside a circle positioned at bottom‑right of the app‑tile */
 .internal-marker {
     position: absolute;

@@ -127,29 +127,28 @@
         </div>
 
         <div class="input-group">
-            <label class="input-label">Obtain AI Key</label>
+            <label class="input-label">Obtain AI Model</label>
             <div style="height:40px; margin-top:1px;">
-                <a target="_blank" style="padding-left:16px;" href="https://openrouter.ai/workspaces/default/keys">From
-                    OpenRouter</a>
+                <a target="_blank" style="padding-left:16px;"
+                    href="https://drive.google.com/file/d/1SkBYIotYCQyuR9xVAnL1YuJ_V2PQFZUE/view?usp=drive_link">Download</a>
             </div>
         </div>
 
         <div class="input-group">
-            <label class="input-label" for="input-ai-key">Your AI Key</label>
-            <input class="input-field" id="input-ai-key" type="text" placeholder="AI key (empty to remove)..."
-                onclick="this.value='';" />
+            <label class="input-label" for="input-ai-key">AI Model</label>
+            <input class="input-field" id="input-ai-key" type="text" placeholder="Not loaded" readonly onclick="" />
         </div>
 
-        <button class="action-btn" id="btn-set-ai-key" (click)="setAIKey($event)">Set AI Key</button>
+        <button class="action-btn" id="btn-set-ai-key" (click)="loadModel($event)">Load Model</button>
         <div>&nbsp;</div>
 
         <div class="input-group">
-            <label class="input-label">AI & Data</label>
+            <label class="input-label">Data</label>
             <div style="height:40px; margin-top:1px;">
-                <a target="_blank" style="padding-left:16px;" href="javascript:"
-                    (click)="showModelInfo($event)">Model</a>
+                <a target="_blank" style="padding-left:16px;" href="javascript:" (click)="updateFtsData($event)">Sync
+                    Search</a>
                 <a target="_blank" style="padding-left:16px;" href="javascript:" (click)="syncNow($event)">Sync
-                    Data</a>
+                    Drive</a>
             </div>
         </div>
 
@@ -280,7 +279,7 @@
 
 <!-- Toast container for ng-angular-popup notifications -->
 <!-- https://www.npmjs.com/package/ng-angular-popup -->
-<ng-toast [position]="TOAST_POSITIONS.BOTTOM_CENTER" [width]="350"></ng-toast>
+<ng-toast [position]="TOAST_POSITIONS.BOTTOM_RIGHT" [width]="350"></ng-toast>
 
 <app-message-box #msgBox />
 <app-confirm-box #confirmBox />
