@@ -1236,6 +1236,7 @@ export class App implements OnDestroy {
         // Find first matching the file path
         for (let folder of folders) {
             const dirHandle = folder.handle;
+            dirHandle.requestPermission({ mode: "readwrite" });
             log("Inner path", innerPath);
 
             // Follow the innerPath items starting from dirHandle to locate the file.
@@ -1322,7 +1323,11 @@ export class App implements OnDestroy {
                 `<end_of_turn>\n` +
                 `<start_of_turn>model\n`;
 
-            await (this.aiModel as any).generateResponse(xmlPrompt, (chunk: any, done: boolean) => {
+            // @ts-ignore
+            var [lock, unlock] = new_lock();
+            // Can't 'await' together with callback(?), errors. 
+            (this.aiModel as any).generateResponse(xmlPrompt, (chunk: any, done: boolean) => {
+                if (done == true) unlock();
                 if (chunk.trim().length == 0) return;
                 // console.log('Stream chunk:', chunk);
                 streamedText += chunk;
@@ -1339,6 +1344,7 @@ export class App implements OnDestroy {
                     console.error('Error converting markdown to HTML:', e);
                 }
             });
+            await lock;
             streamingDiv.remove();
 
             // Convert AI response markdown to HTML using Showdown
