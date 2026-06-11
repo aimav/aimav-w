@@ -1164,98 +1164,7 @@ export class App implements OnDestroy {
     }
 
     //
-    public async sendMessage(ev: Event) {
-        ev.preventDefault();
-        const message = this.chatInput();
-
-        // Save the user's message to IndexedDB using RxDB
-        // Store the message grouped by year. If a record for the current year exists,
-        // push the new message into its `messages` array; otherwise create a new record.
-        try {
-            const currentYear = new Date().getFullYear();
-            // Prepare the new message object and compute token array from its content
-            const tokenArray = this.normalise(message).split(' ');
-            const newMsg = {
-                // @ts-ignore – window.new_id is defined globally
-                idstr: (window as any).new_id(),
-                content: message,
-                timestamp: Date.now()
-            };
-
-            // Attempt to fetch an existing year record using RxDB query
-            // Dexie does not support findOne; use where().equals().first() to fetch the record for the current year
-            const existingDoc = await this.db.chatMessages.where('year').equals(currentYear).first();
-
-            if (existingDoc) {
-                // Dexie returns plain objects; access fields directly
-                const msgs = (existingDoc as any).messages as any[];
-                const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
-                // Update tokens field by appending tokens from the new message
-                const existingTokens = (existingDoc as any).tokens as any[] || [];
-                const updatedTokens = Array.isArray(existingTokens) ? [...existingTokens, ...tokenArray] : [...tokenArray];
-                // Use Dexie's modify to update the existing record
-                await this.db.chatMessages.where('year').equals(currentYear).modify({
-                    messages: updatedMsgs,
-                    tokens: updatedTokens
-                });
-                this.igSync.markChanged(DB_NAME, "chatMessages", existingDoc.id);
-            }
-            else {
-                // No record for this year yet – insert a new document
-                // Generate a unique id for the document (e.g., using timestamp and year)
-                // @ts-ignore
-                const docId = window.new_id();
-                // Dexie uses add/put for inserting new records. Use add to create a new document.
-                await this.db.chatMessages.add({
-                    id: docId,
-                    year: currentYear,
-                    messages: [newMsg],
-                    tokens: tokenArray
-                });
-                this.igSync.markChanged(DB_NAME, "chatMessages", docId);
-            }
-        }
-        catch (e) {
-            console.error('Failed to store chat message in IndexedDB via RxDB', e);
-        }
-
-        // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
-        if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
-            const entry = document.createElement('div');
-            entry.innerHTML = `<h1 style="border-left:1px solid silver;">&nbsp;</h1><b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
-            this.chatLogDiv.nativeElement.appendChild(entry);
-            this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
-        }
-        // Clear the input field
-        this.chatInput.set("");
-        this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
-        // Use FlexSearch cache to find items matching the message
-        try {
-            // Perform a search on the common FlexSearch cache using the user's message
-            // FlexSearch.IndexedDB does not have a typed `search` method in the current typings,
-            // so we cast to `any` to bypass the TypeScript error while still invoking the runtime method.
-            // Use the FlexSearch Document index for searching instead of the IndexedDB cache,
-            // which does not provide a .search method. The index was stored on the component
-            // instance as `commonIndex` during indexing.
-            this.commonIndex = await this.mountCommonIndex();
-            const ftsResults = await (this as any).commonIndex.search(message, {
-                suggest: true
-            });
-
-            if (ftsResults && ftsResults.length) {
-                // Show a toast with the number of matches found
-                this.toast.info(`FlexSearch found ${ftsResults.length} matching item(s)`);
-                // Optionally, you could log the result IDs for debugging
-                let filePath = ftsResults[0].result[0];
-                console.log('FlexSearch results:', filePath);
-            } else {
-                this.toast.info('FlexSearch found no matching items');
-            }
-        } catch (e) {
-            console.error('Error searching FlexSearch cache', e);
-            this.toast.info('Error performing search');
-        }
-
+    public async askOpenRouter(message: string): Promise<void> {
         // Send the message to OpenRouter if an API key is stored
         const apiKey = localStorage.getItem('aiKey');
         var modelName = null;
@@ -1277,6 +1186,7 @@ export class App implements OnDestroy {
         const askingDiv = document.createElement('div');
         askingDiv.textContent = 'Asking model...';
         this.chatLogDiv.nativeElement.appendChild(askingDiv);
+
         try {
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
@@ -1381,6 +1291,101 @@ export class App implements OnDestroy {
                 askingDiv.parentNode.removeChild(askingDiv);
             }
         }
+    }
+
+    //
+    public async sendMessage(ev: Event) {
+        ev.preventDefault();
+        const message = this.chatInput();
+
+        // Save the user's message to IndexedDB using RxDB
+        // Store the message grouped by year. If a record for the current year exists,
+        // push the new message into its `messages` array; otherwise create a new record.
+        try {
+            const currentYear = new Date().getFullYear();
+            // Prepare the new message object and compute token array from its content
+            const tokenArray = this.normalise(message).split(' ');
+            const newMsg = {
+                // @ts-ignore – window.new_id is defined globally
+                idstr: (window as any).new_id(),
+                content: message,
+                timestamp: Date.now()
+            };
+
+            // Attempt to fetch an existing year record using RxDB query
+            // Dexie does not support findOne; use where().equals().first() to fetch the record for the current year
+            const existingDoc = await this.db.chatMessages.where('year').equals(currentYear).first();
+
+            if (existingDoc) {
+                // Dexie returns plain objects; access fields directly
+                const msgs = (existingDoc as any).messages as any[];
+                const updatedMsgs = Array.isArray(msgs) ? [...msgs, newMsg] : [newMsg];
+                // Update tokens field by appending tokens from the new message
+                const existingTokens = (existingDoc as any).tokens as any[] || [];
+                const updatedTokens = Array.isArray(existingTokens) ? [...existingTokens, ...tokenArray] : [...tokenArray];
+                // Use Dexie's modify to update the existing record
+                await this.db.chatMessages.where('year').equals(currentYear).modify({
+                    messages: updatedMsgs,
+                    tokens: updatedTokens
+                });
+                this.igSync.markChanged(DB_NAME, "chatMessages", existingDoc.id);
+            }
+            else {
+                // No record for this year yet – insert a new document
+                // Generate a unique id for the document (e.g., using timestamp and year)
+                // @ts-ignore
+                const docId = window.new_id();
+                // Dexie uses add/put for inserting new records. Use add to create a new document.
+                await this.db.chatMessages.add({
+                    id: docId,
+                    year: currentYear,
+                    messages: [newMsg],
+                    tokens: tokenArray
+                });
+                this.igSync.markChanged(DB_NAME, "chatMessages", docId);
+            }
+        }
+        catch (e) {
+            console.error('Failed to store chat message in IndexedDB via RxDB', e);
+        }
+
+        // Append the message to the chat log using Angular's ElementRef (Angular way, not direct DOM manipulation)
+        if (this.chatLogDiv && this.chatLogDiv.nativeElement) {
+            const entry = document.createElement('div');
+            entry.innerHTML = `<h1 style="border-left:1px solid silver;">&nbsp;</h1><b>You</b>: <span class="user-chat-message" style="background-color:yellow;"><b>${message}</b></span>`;
+            this.chatLogDiv.nativeElement.appendChild(entry);
+            this.chatLogDiv.nativeElement.scrollBy(0, Number.MAX_SAFE_INTEGER);
+        }
+        // Clear the input field
+        this.chatInput.set("");
+        this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
+        // Use FlexSearch cache to find items matching the message
+        try {
+            // Perform a search on the common FlexSearch cache using the user's message
+            // FlexSearch.IndexedDB does not have a typed `search` method in the current typings,
+            // so we cast to `any` to bypass the TypeScript error while still invoking the runtime method.
+            // Use the FlexSearch Document index for searching instead of the IndexedDB cache,
+            // which does not provide a .search method. The index was stored on the component
+            // instance as `commonIndex` during indexing.
+            this.commonIndex = await this.mountCommonIndex();
+            const ftsResults = await (this as any).commonIndex.search(message, {
+                suggest: true
+            });
+
+            if (ftsResults && ftsResults.length) {
+                // Show a toast with the number of matches found
+                this.toast.info(`FlexSearch found ${ftsResults.length} matching item(s)`);
+                // Optionally, you could log the result IDs for debugging
+                let filePath = ftsResults[0].result[0];
+                console.log('FlexSearch results:', filePath);
+            } else {
+                this.toast.info('FlexSearch found no matching items');
+            }
+        } catch (e) {
+            console.error('Error searching FlexSearch cache', e);
+            this.toast.info('Error performing search');
+        }
+        await this.askOpenRouter(message);
     }
 
     public async ngOnInit(): Promise<void> {
