@@ -1275,13 +1275,16 @@ export class App implements OnDestroy {
      * Sends a prompt to the locally loaded LLM model (aiModel) and displays the response.
      * The model is created elsewhere via LlmInference.createFromOptions and stored in `aiModel`.
      */
-    public async askLocalModel(message: string): Promise<void> {
+    public async askLocalModel(message: string, ragDocs: string[] = []): Promise<void> {
         if (this.aiModel == null) {
             this.msgBox.showMsg("AI Model not loaded.");
             return;
         }
         var tokCount = (this.aiModel as any).sizeInTokens(message);
         console.log("Input tokens:", tokCount);
+
+        for (let i = 0; i < ragDocs.length; i++)
+            ragDocs[i] = ragDocs[i].split("/").slice(1).join("/");
 
         // Gemma 3 270m&1B has shared pool for in toks, out toks: 32k
         // out should be at least 8k
@@ -1343,7 +1346,10 @@ export class App implements OnDestroy {
                 // @ts-ignore - showdown is loaded globally from src/libs/showdown.min.js                    
                 const aiMessage = streamedText;
                 var html = converter.makeHtml(aiMessage);
-                html += `<div><small>(Answered by ${this.modelName})</small></div>`;
+                html += `<div>
+                    <small><small>Answered by ${this.modelName}</small></small><br>
+                    <small><small>Files: ${ragDocs.join(", ")}</small></small>
+                </div>`;
                 const aiDiv = document.createElement('div');
                 aiDiv.innerHTML = `<strong>AI</strong> <small>(${this.modelName})</small>: ${html}`;
                 this.chatLogDiv.nativeElement.appendChild(aiDiv);
@@ -1605,7 +1611,7 @@ export class App implements OnDestroy {
             }
             let textPrompt = `${ragText.trim()}\n\n${message}`;
             // log("RAG Prompt: ", textPrompt);
-            await this.askLocalModel(textPrompt);
+            await this.askLocalModel(textPrompt, [filePath]);
         }
     }
 
