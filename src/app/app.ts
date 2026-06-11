@@ -1251,6 +1251,7 @@ export class App implements OnDestroy {
             streamingDiv.className = 'streaming';
             this.chatLogDiv.nativeElement.appendChild(streamingDiv);
 
+            // Gemma 3 tags, gemma 4 is different (eg. <|turn>, <turn|>...)
             var textPrompt =
                 `<bos><start_of_turn>user\n` +
                 `${message.trim()}\n` +
