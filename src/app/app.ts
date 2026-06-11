@@ -467,6 +467,18 @@ export class App implements OnDestroy {
         await igSync.sync(DB_NAME);
     }
 
+    // Update FTS data for all data folders
+    public async updateFtsData(event: Event): Promise<void> {
+        var folders = await this.db.dataFolders.toArray();
+        log("Data folders:", folders);
+
+        for (const folder of folders) {
+            this.toast.info("Updating search data for folder: " + folder.handle.name);
+            await this.indexFts(folder.handle, folder.id);
+        }
+        this.toast.success("Search data updated for all folders");
+    }
+
     /**
      * Load and display stored chat history from RxDB.
      * The collection `chatMessages` stores messages grouped by year.
@@ -483,7 +495,12 @@ export class App implements OnDestroy {
             const docs = await this.db.chatMessages.where('year').equals(year).toArray();
             let html = "<u>Recent Messages:</u> <br>";
             let count = 0;
+            // Reverse docs
+            docs.reverse();
+
             for (const doc of docs) {
+                //Reverse msgs
+                doc.messages.reverse();
                 for (const msg of doc.messages) {
                     html += `•\x20${msg.content}<br/>`;
                     count++;
@@ -1161,7 +1178,11 @@ export class App implements OnDestroy {
     public async loadModel(event: Event): Promise<void> {
         event?.preventDefault?.();
         // await this.msgBox.showMsg("Pick the model file downloaded");
-
+        if (this.aiModel != null) {
+            this.msgBox.showMsg("Model is already loaded");
+            return;
+        }
+        // Pick model file
         try {
             const [fileHandle] = await (window as any).showOpenFilePicker({
                 types: [{
@@ -1366,7 +1387,7 @@ export class App implements OnDestroy {
 
     public modelName: string = "";
 
-    //
+    // Unused, unsure providers to send user's data to.
     public async askOpenRouter(message: string): Promise<void> {
         // Send the message to OpenRouter if an API key is stored
         const apiKey = localStorage.getItem('aiKey');
@@ -1496,10 +1517,42 @@ export class App implements OnDestroy {
         }
     }
 
+    // 
+    public async calcRelationScore(message: string, text: string): Promise<number> {
+        // Get score from openrouter (openai) with a prompt asking to score the relation between message and text
+        try {
+            const prompt =
+                `Analyze the relationship between the following message and text.\n` +
+                `Provide a score between 0 and 10, where 0 means no relation and 10 means strong relation.\n` +
+                `Message: ${message}\n` +
+                `Text: ${text}\n\n` +
+                `Return the score numeric value only, without any explanation.`;
+            // @ts-ignore
+            let scoreText = await this.aiModel.generateResponse(prompt);
+            scoreText = scoreText.replace(/[^0-9.]/g, "");
+            if (scoreText == null || scoreText.length == 0) scoreText = "0";
+            const score = parseFloat(scoreText);
+
+            if (Number.isNaN(score)) {
+                console.error('Invalid score from AI:', scoreText);
+                return 0;
+            }
+            return score;
+        } catch (err) {
+            console.error('Error calling AI:', err);
+            return 0;
+        }
+    }
+
     //
     public async sendMessage(ev: Event) {
         ev.preventDefault();
         const message = this.chatInput();
+
+        if (this.aiModel == null) {
+            this.msgBox.showMsg("AI model is not loaded, please load it first");
+            return;
+        }
 
         // Save the user's message to IndexedDB using RxDB
         // Store the message grouped by year. If a record for the current year exists,
@@ -1562,7 +1615,7 @@ export class App implements OnDestroy {
         // Clear the input field
         this.chatInput.set("");
         this.chatLogDiv.nativeElement.querySelector("#intro-info")?.setAttribute("style", "display:none");
-        var filePath;
+        var filePaths: string[] = [];
 
         // Use FlexSearch cache to find items matching the message
         try {
@@ -1576,13 +1629,16 @@ export class App implements OnDestroy {
             const ftsResults = await (this as any).commonIndex.search(message, {
                 suggest: true
             });
+            log("FTS Results:", ftsResults);
 
             if (ftsResults && ftsResults.length) {
                 // Show a toast with the number of matches found
                 this.toast.info(`FlexSearch found ${ftsResults.length} matching item(s)`);
                 // Optionally, you could log the result IDs for debugging
-                filePath = ftsResults[0].result[0];
-                console.log('FlexSearch results:', filePath);
+                let contentRes = ftsResults.filter((x: any) => x.field == "content")[0];
+                // @ts-ignore
+                filePaths = [...new Set(contentRes.result)].slice(0, 5);
+                console.log('FlexSearch results:', filePaths);
             } else {
                 this.toast.info('FlexSearch found no matching items');
                 console.warn('FlexSearch found no matching items');
@@ -1592,12 +1648,30 @@ export class App implements OnDestroy {
             this.toast.info('Error performing search');
         }
         // await this.askOpenRouter(message);
-        log("Rag path:", filePath);
+        log("Rag path:", filePaths);
 
-        if (filePath == null)
+        if (filePaths.length == 0)
             await this.askLocalModel(message);
         else {
-            let ragText = await this.readRagTextFile(filePath);
+            let ragTexts = [];
+
+            for (let p of filePaths) {
+                let ragText = await this.readRagTextFile(p);
+                let obj = { path: p, text: ragText, score: 0 };
+                obj.score = await this.calcRelationScore(message, ragText);
+                ragTexts.push(obj);
+            }
+            ragTexts.sort((a, b) => b.score - a.score);
+            // @ts-ignore
+            log("All rag texts: ", ragTexts.map(t => {
+                // @ts-ignore
+                return { path: t.path, score: t.score }
+            }));
+            // @ts-ignore
+            log("Top rag text:", ragTexts[0]);
+
+            // Get top doc
+            let ragText = ragTexts[0].text;
 
             // @ts-ignore
             while (this.aiModel.sizeInTokens(ragText) > MAX_INP_TOKENS) {
@@ -1605,7 +1679,7 @@ export class App implements OnDestroy {
             }
             let textPrompt = `${ragText.trim()}\n\n${message}`;
             // log("RAG Prompt: ", textPrompt);
-            await this.askLocalModel(textPrompt, [filePath]);
+            await this.askLocalModel(textPrompt, [ragTexts[0].path]);
         }
     }
 
